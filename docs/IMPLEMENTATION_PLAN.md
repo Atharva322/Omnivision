@@ -45,6 +45,12 @@ hear them say it. Every reliability property in this system descends from that i
 
 **Intended outcome:** 20 consecutive trials with zero false assertions, run entirely hands-free.
 
+> **See also [`DEVELOPER_CENTER.md`](./DEVELOPER_CENTER.md)** — audit of the full Wearables Developer
+> Center toolset. Key result: **Web Apps cannot access the camera or microphone**, so the richer
+> input surface (captouch, Neural Band, motion, GPS) is unusable for this product on any hardware.
+> We stay native. That document also covers the AI tooling, release channels, and simulation
+> features adopted below.
+
 ---
 
 ## Global Constraints
@@ -63,6 +69,14 @@ hear them say it. Every reliability property in this system descends from that i
   and not a common first name.
 - **iOS 15.2+, Xcode 14+.** `Info.plist` requires `NSMicrophoneUsageDescription`,
   `NSSpeechRecognitionUsageDescription`, `NSCameraUsageDescription`, `NSBluetoothAlwaysUsageDescription`.
+- **One active DAT session per device.** If the Meta AI app or another integration holds a session,
+  ours cannot acquire one. Force-quit competing apps as part of the pre-demo checklist.
+- **Split permission model.** Camera is granted through the **Meta AI app**; microphone through
+  **standard platform dialogs**. Two flows, two failure modes — rehearse both.
+- **Registration is a deeplink** out to the Meta AI app, not an in-app flow. The wearer cannot see
+  that context switch, so the Narrator must speak through it.
+- **Modules:** `MWDATCore` (registration, discovery, permissions), `MWDATCamera` (video/photo).
+  `MWDATDisplay` is Display-only and unused.
 
 ---
 
@@ -306,6 +320,29 @@ barista daily and your sister monthly.
 
 Assumes the shop-assist teammate is one CS grad, leaving **2 CS + 1 ECE + 1 HCI**.
 
+### Track 0 — whole team, first 15 minutes
+
+Cheap, parallel, and every item removes a later failure. Nobody writes code until these are done.
+
+- [ ] **Every engineer** wires Meta's live-docs MCP server — the toolkit is a moving preview and v0.6
+      broke streaming code between releases. Do not code DAT from memory:
+```bash
+claude mcp add --transport http wearables --scope user https://mcp.developer.meta.com/wearables
+claude mcp list   # expect: wearables ... ✔ Connected
+```
+- [ ] **Clone the SDK repo locally** (not just SPM) — it ships `.claude-plugin/`, `AGENTS.md`,
+      `.cursor/rules/`, and Copilot instructions covering streaming patterns, MockDeviceKit, session
+      lifecycle, permissions, and debugging. Free, and already written.
+- [ ] **A: create the Developer Center org, add all 5 members, create a `demo` release channel.**
+      This is how teammates get builds onto their own glasses without TestFlight. Doing it at Hour 0
+      means the freeze build is not the first upload anyone has ever attempted.
+- [ ] **A: ask Meta directly whether anonymous face clustering is permitted under the DAT Acceptable
+      Use Policy** (question 5 in `DEVELOPER_CENTER.md`). Faster and more reliable than reading the
+      AUP ourselves, and it is the only open question that can force a design change.
+- [ ] **B: enable permission simulation and phone-camera video streaming simulation** (both v0.6).
+      Combined with Mock Device Kit this means **only Track B needs the physical glasses** — A, C,
+      and D are fully unblocked with one pair between four people.
+
 ### Track A — CS · Lead: Core + Identity
 
 - [ ] **0:00–0:45 — Publish `Protocols.swift` and `Models.swift` exactly as above. Then freeze.**
@@ -350,6 +387,9 @@ var isGlassesRoute: Bool {
 - [ ] `GlassesLink` — DAT session, **started only after `AudioSpine.start()` completes**
 - [ ] `PhotoCapture` on demand; no continuous stream
 - [ ] Disconnect detection → `Earcon.disconnected` **immediately**; reconnect without app restart
+- [ ] **Surface `DeviceState` and `ThermalLevel`** (v0.7). We hold an always-on HFP session; warn the
+      wearer audibly before thermal throttling degrades capture. Silent degradation is the failure
+      mode this product can least afford.
 - [ ] `MockGlasses` fixture source by **2:00** so A, C, and D stop competing for the hardware
 - [ ] Optional: phone-mic secondary channel, tagged `.other`, feature-flagged off by default
 
@@ -391,7 +431,8 @@ String work is testable in a Playground without deep iOS knowledge; measurement 
 
 | Time | Work | Gate |
 |---|---|---|
-| 0:00–0:45 | Dev Mode, SPM, **protocols published + frozen** | **G0 @0:45** — protocols merged; DAT connects |
+| 0:00–0:15 | **Track 0** — MCP wired, SDK repo cloned, org + release channel, AUP question sent | all 5 report MCP `✔ Connected` |
+| 0:15–0:45 | Dev Mode, SPM, **protocols published + frozen** | **G0 @0:45** — protocols merged; DAT connects |
 | 0:45–1:30 | B: HFP route up. C: wake-word + WER tests. | **G1 @1:30** — C reports wearer-vs-other WER numbers |
 | 1:30–3:30 | Everyone to mocks. SpeechStream, NameExtractor, Narrator, PersonStore | **G2 @3:30** — "Lumen, remember this" → transcript on screen |
 | 3:30–5:30 | Binding: echo templates → NLTagger → PersonStore. Tiers. | **G3 @5:30** — say "Nice to meet you, Priya" → Priya saved |
