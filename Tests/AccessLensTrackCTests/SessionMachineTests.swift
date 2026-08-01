@@ -54,7 +54,8 @@ final class SessionMachineTests: XCTestCase {
 
         try await machine.rejectReportedIdentity()
 
-        XCTAssertEqual(await machine.currentState(), .binding)
+        let stateAfterBind = await machine.currentState()
+        XCTAssertEqual(stateAfterBind, .binding)
     }
 
     func testCorrectionOutsideReportingIsRejected() async {
