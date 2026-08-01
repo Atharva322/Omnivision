@@ -55,11 +55,12 @@ final class ShopScanner {
     /// Save whatever is currently in frame as the preference for `targetCategory`.
     /// Backs "Lumen, remember this one".
     func rememberProductInFrame(
-        _ image: CGImage, brand: String, variant: String?
+        _ frame: CapturedFrame, brand: String, variant: String?
     ) async -> Bool {
         // `try?` on a String?-returning throwing call yields String?? — flatten it, or a
         // successful scan that found no barcode is indistinguishable from a thrown error.
-        let scanned = (try? await scanner.payload(in: image)) ?? nil
+        let scanned = (try? await scanner.payload(
+            in: frame.image, orientation: frame.orientation)) ?? nil
         guard let barcode = scanned else {
             narrator.say(
                 "I can't read a barcode. Turn the package slowly toward the camera.",
@@ -75,7 +76,7 @@ final class ShopScanner {
     // MARK: - Frame loop
 
     /// Drive from the DAT camera stream. Runs until the stream finishes.
-    func consume(_ frames: AsyncStream<CGImage>, context: @escaping () -> ProactiveContext) async {
+    func consume(_ frames: AsyncStream<CapturedFrame>, context: @escaping () -> ProactiveContext) async {
         for await frame in frames {
             guard !isScanning else {
                 framesDropped += 1
@@ -87,17 +88,18 @@ final class ShopScanner {
 
     /// One deliberate look. Backs "Lumen, what is this?" — and unlike the proactive path this
     /// always answers, because the wearer is waiting on it.
-    func scanOnRequest(_ image: CGImage, context: ProactiveContext) async {
-        await scan(image, mode: .requested, context: context)
+    func scanOnRequest(_ frame: CapturedFrame, context: ProactiveContext) async {
+        await scan(frame, mode: .requested, context: context)
     }
 
-    private func scan(_ image: CGImage, mode: NarrationMode, context: ProactiveContext) async {
+    private func scan(_ frame: CapturedFrame, mode: NarrationMode, context: ProactiveContext) async {
         isScanning = true
         defer { isScanning = false }
 
         framesScanned += 1
 
-        let payload = (try? await scanner.payload(in: image)) ?? nil
+        let payload = (try? await scanner.payload(
+            in: frame.image, orientation: frame.orientation)) ?? nil
         let recognition = catalog.recognize(barcode: payload, inCategory: targetCategory)
         lastRecognition = recognition
 
