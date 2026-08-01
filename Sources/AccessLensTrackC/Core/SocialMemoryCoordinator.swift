@@ -107,6 +107,11 @@ public actor SocialMemoryCoordinator {
                 try await sessionMachine.pause()
                 resetConversation()
                 return .capturePaused
+            case .lookingFor, .whatIsThis, .rememberThisOne:
+                // Shop commands. This coordinator is the social-memory path only; the shop
+                // session (docs/SHOP_SCREEN_PLAN.md Task 4) handles these itself. Still logged
+                // above, so they show up in the event log even though nothing else happens here.
+                return .noAction
             }
         }
 

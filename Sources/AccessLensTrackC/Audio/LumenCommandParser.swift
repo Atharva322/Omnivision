@@ -210,6 +210,23 @@ public struct LumenCommandParser: CommandParsing {
             }
         }
 
+        if let start = suffix(after: ["im", "looking", "for"], in: rest) {
+            guard start < rest.count else {
+                return .rejected(.emptyArgument(phraseID: CommandPhraseID.lookingFor))
+            }
+            let text = SpeechTokenizer.text(of: rest[start...], in: utterance.text)
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                return .rejected(.emptyArgument(phraseID: CommandPhraseID.lookingFor))
+            }
+            return .matched(ParsedCommand(
+                command: .lookingFor(category: trimmed.lowercased()),
+                phraseID: CommandPhraseID.lookingFor,
+                wakeWordHeard: wakeWordHeard,
+                argument: trimmed
+            ))
+        }
+
         // No-argument rows. Each must consume the whole remainder apart from allowed fillers.
         for row in Self.simpleRows {
             guard let start = suffix(after: row.phrase, in: rest) else { continue }
@@ -231,12 +248,19 @@ public struct LumenCommandParser: CommandParsing {
         let phraseID: String
     }
 
-    /// Longest phrases first so a shorter row can never shadow a longer one.
+    /// Longest phrases first so a shorter row can never shadow a longer one. "remember this one"
+    /// (shop) must precede "remember this" (social) for that reason — though in practice the
+    /// trailing-filler check on the shorter row would also reject "one" as an unmatched trailing
+    /// word, so the two do not actually collide. Same for "what is this" (shop, one deliberate
+    /// scan) staying distinct from "who is this" (social, discreet re-greeting) — different first
+    /// token, never ambiguous.
     private static let simpleRows: [SimpleRow] = [
         SimpleRow(phrase: ["who", "is", "this"], command: .whoIsThis, phraseID: CommandPhraseID.whoIsThis),
         SimpleRow(phrase: ["whos", "this"], command: .whoIsThis, phraseID: CommandPhraseID.whoIsThis),
+        SimpleRow(phrase: ["what", "is", "this"], command: .whatIsThis, phraseID: CommandPhraseID.whatIsThis),
         SimpleRow(phrase: ["that", "is", "wrong"], command: .thatsWrong, phraseID: CommandPhraseID.thatsWrong),
         SimpleRow(phrase: ["thats", "wrong"], command: .thatsWrong, phraseID: CommandPhraseID.thatsWrong),
+        SimpleRow(phrase: ["remember", "this", "one"], command: .rememberThisOne, phraseID: CommandPhraseID.rememberThisOne),
         SimpleRow(phrase: ["remember", "this"], command: .rememberThis, phraseID: CommandPhraseID.rememberThis),
         SimpleRow(phrase: ["forget", "them"], command: .forgetThem, phraseID: CommandPhraseID.forgetThem),
         SimpleRow(phrase: ["favorite"], command: .favorite, phraseID: CommandPhraseID.favorite),

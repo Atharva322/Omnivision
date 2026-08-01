@@ -40,12 +40,22 @@
     { "id": "cmd-063", "category": "clean", "text": "Lumen, pause", "expect": { "command": "pause" } },
     { "id": "cmd-064", "category": "trailing-filler", "text": "Lumen, pause now", "expect": { "command": "pause" } },
 
+    { "id": "cmd-070", "category": "clean", "text": "Lumen, I'm looking for milk", "expect": { "command": "lookingFor", "argument": "milk" } },
+    { "id": "cmd-071", "category": "asr-lowercase", "text": "lumen im looking for bread", "expect": { "command": "lookingFor", "argument": "bread" } },
+    { "id": "cmd-072", "category": "multi-word-argument", "text": "Lumen, I'm looking for peanut butter", "expect": { "command": "lookingFor", "argument": "peanut butter" } },
+    { "id": "cmd-073", "category": "clean", "text": "Lumen, what is this?", "expect": { "command": "whatIsThis" } },
+    { "id": "cmd-074", "category": "clean", "text": "Lumen, remember this one", "expect": { "command": "rememberThisOne" } },
+    { "id": "cmd-075", "category": "grammar-adjacency", "text": "Lumen, remember this", "note": "Must still resolve to the social command, not the shop one, one word away.", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-076", "category": "grammar-adjacency", "text": "Lumen, who is this", "note": "Must still resolve to the social command, not 'what is this'.", "expect": { "command": "whoIsThis" } },
+
     { "id": "cmd-100", "category": "false-positive", "text": "the lumen output of that bulb is too low", "note": "'lumen' as the unit of luminous flux, mid-sentence.", "expect": { "command": null } },
     { "id": "cmd-101", "category": "false-positive", "text": "I picked up a 500 lumen flashlight", "expect": { "command": null } },
     { "id": "cmd-102", "category": "false-positive", "text": "Lumen is a unit of luminous flux", "note": "Wake word in first position, but the remainder is not a grammar row.", "expect": { "command": null } },
     { "id": "cmd-103", "category": "false-positive", "text": "I was reading about lumens yesterday", "expect": { "command": null } },
     { "id": "cmd-104", "category": "false-positive", "text": "so I told him lumen, stop", "note": "Wake word too deep in the sentence to be an invocation.", "expect": { "command": null } },
     { "id": "cmd-105", "category": "false-positive", "text": "Lumen, stop by the store later", "note": "'stop' is present but the remainder is conversation, not a command.", "expect": { "command": null } },
+    { "id": "cmd-106", "category": "false-positive", "text": "I've been looking for my keys all morning", "note": "no wake word — ordinary speech about 'looking for' something.", "expect": { "command": null } },
+    { "id": "cmd-107", "category": "false-positive", "text": "do you remember that one time at the beach", "note": "no wake word — contains both 'remember' and 'one' without being the shop command.", "expect": { "command": null } },
 
     { "id": "cmd-110", "category": "near-miss-wake-word", "text": "Lumens, remember this", "expect": { "command": null } },
     { "id": "cmd-111", "category": "near-miss-wake-word", "text": "Lumin, remember this", "expect": { "command": null } },
@@ -64,6 +74,7 @@
     { "id": "cmd-132", "category": "partial-transcript", "text": "Lumen, remind me to", "expect": { "command": null } },
     { "id": "cmd-133", "category": "partial-transcript", "text": "Lumen, remember", "expect": { "command": null } },
     { "id": "cmd-134", "category": "partial-transcript", "text": "Lumen, who is", "expect": { "command": null } },
+    { "id": "cmd-135", "category": "partial-transcript", "text": "Lumen, I'm looking for", "expect": { "command": null } },
 
     { "id": "cmd-140", "category": "invalid-name-slot", "text": "Lumen, this is great", "expect": { "command": null, "name": null } },
     { "id": "cmd-141", "category": "invalid-name-slot", "text": "Lumen, this is everyone", "expect": { "command": null, "name": null } },
