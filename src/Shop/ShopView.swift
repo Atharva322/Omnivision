@@ -59,6 +59,12 @@ final class ShopSession {
     private(set) var framesReceived = 0
     private var cameraWatchdog: Task<Void, Never>?
 
+    /// What "remember this one" just overwrote, so "Lumen, that's wrong" can put it back. Cleared
+    /// on undo, on the next save, or once `undoWindow` has passed — an undo offered five minutes
+    /// later, after the wearer has moved on, would revert a save they no longer remember making.
+    private var pendingUndo: (category: String, previous: SavedProduct, at: Date)?
+    private let undoWindow: TimeInterval = 30
+
     let narrator = Narrator()
 
     private let spine = AudioSpine()
@@ -247,6 +253,12 @@ final class ShopSession {
         case .rememberThisOne:
             await rememberProductInFrame()
 
+        case .thatsWrong:
+            // Shared with the social grammar. Here it only means one thing: undo the most recent
+            // "remember this one" — see undoLastSave() for why it is a no-op rather than an error
+            // when nothing is pending, since the wearer may well have meant it for the other track.
+            await undoLastSave()
+
         default:
             // Social-track commands. This session does not act on them; the social screen does.
             log("command", String(describing: command), spoken: nil)
@@ -328,6 +340,15 @@ final class ShopSession {
             log("command", "remember this one — no frame yet", spoken: text)
             return
         }
+        guard let store else {
+            // Never claim a save succeeded when nothing was written — that is what makes every
+            // OTHER "Saved" in this session trustworthy. A corrupt store must not silently lose
+            // the wearer's preference AND tell them it worked.
+            let text = "I can't save right now."
+            narrator.say(text, priority: .normal)
+            log("error", "remember this one — store unavailable", spoken: text)
+            return
+        }
 
         do {
             let text = try await PackageTextReader.read(frame.image, orientation: frame.orientation)
@@ -346,13 +367,51 @@ final class ShopSession {
 
             let product = SavedProduct(
                 barcode: barcode ?? "", brand: brand, variant: variant, category: category)
-            try await store?.save(product)
+            let previous = await store.saved(inCategory: category)
+            try await store.save(product)
 
-            // Read it back for confirmation (Task 6, Step 3) — the wearer cannot see what was
-            // captured, so a silently wrong preference would poison every future comparison.
-            let spoken = "Saved \(product.label). Is that right?"
+            // "Is that right?" was spoken here before, but nothing ever listened for an answer —
+            // asking a question the system cannot hear is worse than not asking. Offering a real
+            // undo instead (Task 6, Step 3's actual intent: the wearer cannot see what was
+            // captured, so a silently wrong preference would poison every future comparison).
+            if let previous {
+                pendingUndo = (category: category, previous: previous, at: Date())
+                let spoken = "Replacing your usual \(previous.label) with \(product.label). Say \"that's wrong\" to undo."
+                narrator.say(spoken, priority: .normal)
+                log("command", "remember this one — replaced \(previous.label)", spoken: spoken)
+            } else {
+                pendingUndo = nil
+                let spoken = "Saved \(product.label)."
+                narrator.say(spoken, priority: .normal)
+                log("command", "remember this one", spoken: spoken)
+            }
+        } catch {
+            lastError = error.localizedDescription
+            log("error", error.localizedDescription, spoken: nil)
+        }
+    }
+
+    /// "Lumen, that's wrong" within `undoWindow` of a "remember this one" that replaced an
+    /// existing preference — puts the previous one back.
+    private func undoLastSave() async {
+        guard let pending = pendingUndo, let store else {
+            // Nothing pending, or the store is unavailable. Not an error: the wearer may well
+            // have meant this for the social track, since `that's wrong` is shared vocabulary.
+            log("command", "that's wrong — nothing to undo here", spoken: nil)
+            return
+        }
+        guard Date().timeIntervalSince(pending.at) <= undoWindow else {
+            pendingUndo = nil
+            log("command", "that's wrong — undo window expired", spoken: nil)
+            return
+        }
+
+        do {
+            try await store.save(pending.previous)
+            pendingUndo = nil
+            let spoken = "Reverted. Your usual \(pending.previous.label) is back."
             narrator.say(spoken, priority: .normal)
-            log("command", "remember this one", spoken: spoken)
+            log("command", "undo remember this one", spoken: spoken)
         } catch {
             lastError = error.localizedDescription
             log("error", error.localizedDescription, spoken: nil)

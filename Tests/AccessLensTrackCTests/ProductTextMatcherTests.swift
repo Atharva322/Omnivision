@@ -116,33 +116,61 @@ final class ProductTextMatcherTests: XCTestCase {
         XCTAssertEqual(expected, davesKillerBread)
     }
 
-    // MARK: - No preference recorded
+    // MARK: - No preference recorded — distinct from an OCR failure
 
-    func testNoSavedPreferenceForCategoryIsNothingRecognised() {
+    func testNoSavedPreferenceForCategoryIsReportedAsNoPreferenceSet() {
         let catalog = ProductCatalog()  // nothing saved
         let text = PackageText(lines: [line("Dave's Killer Bread", height: 0.9)])
 
         XCTAssertEqual(
-            ProductTextMatcher.match(text, against: catalog, category: "bread"), .nothingRecognised)
+            ProductTextMatcher.match(text, against: catalog, category: "bread"), .noPreferenceSet)
     }
 
-    // MARK: - Brand itself not legible
+    // MARK: - Nothing legible at all — a genuine OCR failure, distinct from the above
 
-    func testBrandNotLegibleAnywhereIsNothingRecognised() {
-        var catalog = ProductCatalog()
-        catalog.save(davesKillerBread)
-        let text = PackageText(lines: [line("Some Other Bakery", height: 0.9)])
-
-        XCTAssertEqual(
-            ProductTextMatcher.match(text, against: catalog, category: "bread"), .nothingRecognised)
-    }
-
-    func testNoTextAtAllIsNothingRecognised() {
+    func testNoTextAtAllIsReportedAsNothingLegible() {
         var catalog = ProductCatalog()
         catalog.save(davesKillerBread)
 
         XCTAssertEqual(
             ProductTextMatcher.match(PackageText(lines: []), against: catalog, category: "bread"),
-            .nothingRecognised)
+            .nothingLegible)
+    }
+
+    // MARK: - A completely different brand — the substitution case this path must not miss
+
+    /// Previously this fell through to "nothing recognised", the same as a blank frame — which
+    /// meant the one failure mode this whole path exists to catch (picking up the wrong product)
+    /// was silently indistinguishable from not looking at anything at all.
+    func testCompletelyDifferentBrandIsReportedAsDifferentProductNotNothing() {
+        var catalog = ProductCatalog()
+        catalog.save(davesKillerBread)
+        let text = PackageText(lines: [
+            line("Some Other Bakery", height: 0.9),
+            line("Sourdough", height: 0.5),
+        ])
+
+        let result = ProductTextMatcher.match(text, against: catalog, category: "bread")
+
+        guard case .differentProduct(let brand, let variant, let expected) = result else {
+            return XCTFail("a legible but unrelated brand must not collapse into nothingLegible — got \(result)")
+        }
+        XCTAssertEqual(brand, "Some Other Bakery")
+        XCTAssertEqual(variant, "Sourdough")
+        XCTAssertEqual(expected, davesKillerBread)
+    }
+
+    func testCompletelyDifferentBrandWithOnlyOneLegibleLineStillReports() {
+        var catalog = ProductCatalog()
+        catalog.save(davesKillerBread)
+        let text = PackageText(lines: [line("Wonder Bread", height: 0.9)])
+
+        guard case .differentProduct(let brand, let variant, _) = ProductTextMatcher.match(
+            text, against: catalog, category: "bread"
+        ) else {
+            return XCTFail("a single legible unrelated brand must still be reported, not dropped")
+        }
+        XCTAssertEqual(brand, "Wonder Bread")
+        XCTAssertNil(variant)
     }
 }
