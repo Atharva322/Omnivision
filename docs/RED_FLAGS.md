@@ -27,25 +27,41 @@ includes the things I have written most confidently.
 
 ---
 
-## CRITICAL — could break the demo
+## ~~CRITICAL~~ RESOLVED 2026-08-01 — the social track works on hardware
 
-### 1. Nobody has ever heard this system speak
+### ~~1. Nobody has ever heard this system speak~~ — RESOLVED
 
-Track D shipped `Narrator` and `AVNarrationOutput`, and the code compiles and is unit-tested. **No
-audio has been heard from the glasses, by anyone, ever.** Everything so far has been verified by
-reading a screen.
+**Speech comes out of the glasses, while the microphone is live.** Verified on device.
 
-The specific fear: `AudioSpine` holds the session in `.playAndRecord` with `.allowBluetooth` for HFP
-capture. Speech output while that session is live has never been tried. Plausible failure modes:
-audio comes out of the **phone** instead of the glasses, or opening the mic drops output to
-narrowband, or the two fight and one wins silently.
+My specific fear was that `AudioSpine` holding the session in `.playAndRecord` with `.allowBluetooth`
+would fight speech output — that audio would come out of the phone, or the two would conflict and one
+would win silently. **It does not happen.** The glasses handle simultaneous HFP capture and speech
+output at 16 kHz without contention. Record this: it is the assumption the whole product rests on and
+it is now measured rather than hoped.
 
-**This is the single highest risk in the project** and it is 5 minutes to check.
+Latency from end of sentence to spoken response: **1–2 seconds.** The 0.8 s silence-finalisation fix
+works on hardware — it had been up to 45 s when utterances waited for `isFinal`.
 
-### 2. Both features have never run end-to-end on hardware
+### ~~2. Both features have never run end-to-end on hardware~~ — SOCIAL TRACK RESOLVED
 
-`OmnivisionView` wires everything together and builds. It has never been run with glasses attached.
-Every component is individually tested; the composition is not.
+Full run observed live, 8 exchanges. Every gate behaved:
+
+| Said | Result |
+|---|---|
+| "Nice to meet you Priya" | ASSERT, spoke "Priya. Saved." |
+| "Lumen, this is Marcus" | explicit bind, spoke "Marcus. Saved." |
+| "Nice to meet you Priya" (repeat) | **HELD** — `repeatedTooSoon` |
+| "Lumen, pause" | earcon, then genuine silence |
+| "Nice to meet you Sarah" | **HELD** — `wearerAskedForSilence` |
+| "Repeat" (no wake word) | ignored, correctly |
+
+And the one that matters most: the recogniser mangled a name into `"Nice to meet you you"` and the
+system produced **no candidate at all** — it did not bind "you" as a person. Precision over recall,
+holding on real degraded input.
+
+Audio route stayed `Glasses — HFP, 16000 Hz` across all 8 exchanges. No mid-session drop.
+
+**The shop track has still never run on hardware.**
 
 ### 3. One DAT session per device
 
@@ -64,15 +80,16 @@ works**, not after something breaks.
 
 ### 5. Nothing has run for more than a few minutes
 
+*(Partially addressed: 8 exchanges held the route and kept transcribing. A 5-minute continuous run is
+still untested, and recogniser rotation only matters past that.)*
+
 `SFSpeechRecognizer` degrades over long sessions; the code rotates tasks on silence to handle that,
 and **the rotation has never been exercised past a couple of minutes**. A demo is 2–5 minutes; a
 rehearsal day is hours.
 
-### 6. The latency fix is unverified on device
+### ~~6. The latency fix is unverified on device~~ — RESOLVED
 
-Utterances were sitting unemitted for up to 45 s because I only committed on `isFinal`, which
-on-device recognition often never fires. Now they emit after 0.8 s of silence. **Measured in code,
-not on hardware.**
+Measured at 1–2 s end-to-end on hardware. Was up to 45 s.
 
 ### 7. Battery and thermals unmeasured
 
