@@ -15,6 +15,9 @@ evidence ladder, and every caller stay unchanged.
 **Tech Stack:** Swift 5.9 · Vision (`VNDetectFaceLandmarksRequest`) · Core ML · Accelerate (vDSP) ·
 coremltools 8.x (Python, conversion only)
 
+For the exact Mac execution order, remaining implementation tasks, expected outputs, iPhone handoff,
+and definition of done, follow `docs/FACE_EMBEDDING_MACOS_COMPLETION_PLAN.md`.
+
 ## Implementation status — foundation branch
 
 Started on `feature/face-embedding-foundation`. Implemented: five-point similarity-transform math,
@@ -142,8 +145,9 @@ embedding publicly. Hence Core ML.
 | `Sources/AccessLensTrackC/Face/EmbeddingMatcher.swift` | Cosine similarity, threshold policy, nearest match |
 | `Sources/AccessLensTrackC/Face/FaceEmbeddingStore.swift` | Persisted embeddings per person; supports deletion |
 | `Sources/AccessLensTrackC/Identity/FaceCluster.swift` | **Modified.** Orchestrates the above; protocol unchanged |
-| `Resources/MobileFaceNet.mlpackage` | The model |
-| `Tools/calibrate/main.swift` | Offline calibration harness (Task 5) |
+| `Resources/Models/MobileFaceNet.mlpackage` | Locally generated, Git-ignored model |
+| `Tools/calibrate/calibrate.py` | ONNX/dataset smoke calibration harness |
+| `face-calibrate-apple` follow-up target | Authoritative Vision/Core ML calibration harness |
 
 Keep the pure maths (alignment transform, cosine similarity, threshold policy) in types with **no
 Core ML and no Vision dependency**. That is what makes them testable on Linux and in CI without a
@@ -287,6 +291,10 @@ public struct EmbeddingMatcher: Sendable {
 
 The previous threshold was wrong by a factor of twenty and nothing caught it. **Never hardcode a
 threshold you have not measured on this hardware.**
+
+The Python harness uses InsightFace detection/alignment and is therefore a smoke test. The final
+threshold must come from the exact Apple pipeline described in
+`FACE_EMBEDDING_MACOS_COMPLETION_PLAN.md`.
 
 - [ ] **Step 1: Capture a calibration set through the glasses** — not a phone. Minimum **10 people ×
       5 photos**: face-on, ±30°, two lighting conditions, one at ~2 m. The existing 9-photo set is a

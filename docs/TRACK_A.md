@@ -1,5 +1,9 @@
 # Track A — Core + Identity audit and test handoff
 
+The Mac owner completing face embeddings must also follow
+`docs/FACE_EMBEDDING_MACOS_COMPLETION_PLAN.md`; the Python calibration report alone cannot authorize
+the iOS threshold because the application uses Apple's Vision alignment pipeline.
+
 This document is the Track A source of truth for the `feature/track-c-speech-identity` branch. The
 portable module is named `AccessLensTrackC` for historical reasons, but it now contains both Track A
 core/identity work and Track C extraction work. Do not create a second Core or Identity tree.
