@@ -81,9 +81,19 @@ final class SpeechStream: SpeechStreaming {
   private var request: SFSpeechAudioBufferRecognitionRequest?
   private var task: SFSpeechRecognitionTask?
   private var lastVoiceActivity = Date()
+  /// Long-session guard: SFSpeechRecognizer degrades if a task runs indefinitely.
   private let rotateAfter: TimeInterval = 45
   private let silenceGap: TimeInterval = 0.6
+  /// Silence after which a pending transcript is emitted immediately.
+  ///
+  /// On-device recognition often never fires `isFinal`, so waiting for it meant an utterance sat
+  /// unemitted until the 45 s rotation — a timer that exists to keep the recogniser healthy, not
+  /// to pace output. Speech is finalised on a natural pause instead, which is what a listener
+  /// does anyway.
+  private let finalizeAfterSilence: TimeInterval = 0.8
   private var taskStartedAt = Date()
+  /// Guards against re-emitting the same pending text on every buffer during a long silence.
+  private var flushedSinceLastSpeech = true
 
   init() {
     var continuation: AsyncStream<Utterance>.Continuation!
@@ -146,12 +156,23 @@ final class SpeechStream: SpeechStreaming {
 
     if isVoiceActive(buffer) {
       lastVoiceActivity = Date()
+      flushedSinceLastSpeech = false
       return
     }
 
-    let inSilence = Date().timeIntervalSince(lastVoiceActivity) > silenceGap
-    let taskIsStale = Date().timeIntervalSince(taskStartedAt) > rotateAfter
-    if inSilence && taskIsStale {
+    let silence = Date().timeIntervalSince(lastVoiceActivity)
+
+    // Emit on a natural pause. This is the path that actually delivers utterances; `isFinal` is
+    // treated as a bonus rather than the trigger.
+    if !flushedSinceLastSpeech, silence > finalizeAfterSilence, !partialText.isEmpty {
+      flushedSinceLastSpeech = true
+      rotateTask()
+      return
+    }
+
+    // Independent of the above: keep the recogniser from running too long, but only cut over
+    // during silence so a sentence is never split.
+    if silence > silenceGap, Date().timeIntervalSince(taskStartedAt) > rotateAfter {
       rotateTask()
     }
   }
