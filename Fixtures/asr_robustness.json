@@ -1,0 +1,72 @@
+{
+  "name": "asr_robustness",
+  "description": "How extraction behaves when the SAME sentence is spoken by different people, at different rates, with different accents, through an 8 kHz beamformed mic. NOT A VOICE TEST — no audio, no microphone, no recogniser is involved. These are the textual signatures that those conditions leave in an SFSpeechRecognizer transcript: elided function words at speed, fillers and repetitions when hesitant, consonant confusions in narrowband, truncation when a phrase is cut, crosstalk when two people overlap, and spelling substitutions when a name is unfamiliar to the recogniser. Expectations encode INTENDED behaviour. Two rules govern them: a degradation that leaves the name intact should still bind (recall), and a degradation that corrupts the name must never assert a wrong one (precision). Real word error rates come from gate G1 on the glasses, not from this file.",
+  "cases": [
+
+    { "id": "rate-001", "category": "fast-elision", "text": "nice meet you priya", "note": "'to' swallowed at speed — the single most common fast-speech elision in this frame.", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "rate-002", "category": "fast-elision", "text": "good see you marcus", "expect": { "name": "Marcus", "evidence": "E1" } },
+    { "id": "rate-003", "category": "fast-elision", "text": "nice to meet you priya", "note": "control — undegraded.", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "rate-004", "category": "fast-elision", "text": "good meet you aisha", "expect": { "name": "Aisha", "evidence": "E1" } },
+    { "id": "rate-005", "category": "fast-elision", "text": "how are you kenji", "expect": { "name": "Kenji", "evidence": "E1" } },
+    { "id": "rate-006", "category": "fast-elision", "text": "how you doing kenji", "note": "'are' dropped AND the frame altered; too far from the template to guess.", "expect": { "name": null } },
+
+    { "id": "rate-020", "category": "fast-merge", "text": "nicetomeetyou priya", "note": "Words run together into one token. The template cannot match and must not guess.", "expect": { "name": null } },
+    { "id": "rate-021", "category": "fast-merge", "text": "nice to meetyou priya", "expect": { "name": null } },
+
+    { "id": "disf-001", "category": "filler", "text": "nice to meet you um priya", "note": "Filler between frame and name — the wearer pausing to catch the name.", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "disf-002", "category": "filler", "text": "nice to meet you uh priya", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "disf-003", "category": "filler", "text": "nice to meet you, uh, Priya", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "disf-004", "category": "filler", "text": "thanks um daniel", "expect": { "name": "Daniel", "evidence": "E1" } },
+    { "id": "disf-005", "category": "filler", "text": "hi er marcus", "expect": { "name": "Marcus", "evidence": "E1" } },
+    { "id": "disf-006", "category": "filler", "text": "nice to meet you um", "note": "Filler and then nothing — no name was ever spoken.", "expect": { "name": null } },
+    { "id": "disf-007", "category": "filler", "text": "nice to meet you um uh er", "expect": { "name": null } },
+
+    { "id": "disf-020", "category": "repetition", "text": "nice nice to meet you priya", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "disf-021", "category": "repetition", "text": "it's it's nice to meet you Priya", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "disf-022", "category": "repetition", "text": "nice to to meet you priya", "note": "Stutter inside the frame itself.", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "disf-023", "category": "repetition", "text": "nice to meet you priya priya", "note": "Name repeated — one person, one candidate.", "expect": { "name": "Priya", "evidence": "E1" } },
+
+    { "id": "disf-040", "category": "false-start", "text": "good to- nice to meet you Priya", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "disf-041", "category": "false-start", "text": "nice to meet you P- Priya", "note": "Wearer restarts the name. Must not bind the fragment.", "expect": { "name": "Priya", "evidence": "E1" } },
+
+    { "id": "nb-001", "category": "narrowband-frame", "text": "night to meet you priya", "note": "8 kHz: 'nice'/'night' confusion in the FRAME. Cannot be repaired without guessing — a safe miss.", "expect": { "name": null } },
+    { "id": "nb-002", "category": "narrowband-frame", "text": "nice to beet you priya", "note": "m/b confusion in the frame.", "expect": { "name": null } },
+    { "id": "nb-003", "category": "narrowband-frame", "text": "tanks daniel", "note": "th/t fronting — very common for several first-language backgrounds.", "expect": { "name": null } },
+    { "id": "nb-004", "category": "narrowband-frame", "text": "sank you daniel", "expect": { "name": null } },
+    { "id": "nb-005", "category": "narrowband-frame", "text": "nice to meet you priya", "note": "control.", "expect": { "name": "Priya" } },
+
+    { "id": "nb-020", "category": "narrowband-name", "text": "nice to meet you preeya", "note": "The NAME is respelled by the recogniser. Track C binds what was transcribed; it has no way to know the intended spelling, and inventing one would be a guess. Correct behaviour is to extract.", "expect": { "name": "Preeya", "evidence": "E1" } },
+    { "id": "nb-021", "category": "narrowband-name", "text": "nice to meet you marcos", "expect": { "name": "Marcos", "evidence": "E1" } },
+    { "id": "nb-022", "category": "narrowband-name", "text": "good to see you yousef", "expect": { "name": "Yousef", "evidence": "E1" } },
+    { "id": "nb-023", "category": "narrowband-name", "text": "nice to meet you thandiway", "expect": { "name": "Thandiway", "evidence": "E1" } },
+
+    { "id": "trunc-001", "category": "truncation", "text": "nice to meet you pri", "note": "SAFETY INVARIANT: a truncated name must never be asserted.", "expect": { "name": null, "mustNotAssert": true } },
+    { "id": "trunc-002", "category": "truncation", "text": "nice to meet you prem", "note": "4-character truncation of e.g. Premila. Long enough to look like a name, short enough to be a fragment.", "expect": { "mustNotAssert": true } },
+    { "id": "trunc-003", "category": "truncation", "text": "nice to meet you sama", "note": "Truncation of Samantha.", "expect": { "mustNotAssert": true } },
+    { "id": "trunc-004", "category": "truncation", "text": "nice to meet you chris", "note": "Ambiguous: a real name AND a truncation of Christopher. Binding 'Chris' is acceptable — it is what was said.", "expect": { "name": "Chris" } },
+    { "id": "trunc-005", "category": "truncation", "text": "good to see you marc", "note": "Truncation of Marcus, but also a real name.", "expect": { "mustNotAssert": false } },
+    { "id": "trunc-006", "category": "truncation", "text": "nice to meet", "expect": { "name": null } },
+    { "id": "trunc-007", "category": "truncation", "text": "nice to meet you olu", "note": "Truncation of Oluwaseun.", "expect": { "mustNotAssert": true } },
+
+    { "id": "xtalk-001", "category": "crosstalk", "text": "sorry nice to meet you priya", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "xtalk-002", "category": "crosstalk", "text": "nice to meet you priya yeah absolutely", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "xtalk-003", "category": "crosstalk", "text": "yeah no nice to meet you priya", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "xtalk-004", "category": "crosstalk", "text": "nice to meet you priya so what do you do", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "xtalk-005", "category": "crosstalk", "text": "nice to meet you and this is marcus", "note": "Two frames, two people, one of them unnamed. Only the named one binds.", "expect": { "name": "Marcus" } },
+
+    { "id": "long-001", "category": "long-turn", "text": "hi yes hello nice to meet you priya i'm here for the panel", "expect": { "name": "Priya", "evidence": "E1" } },
+    { "id": "long-002", "category": "long-turn", "text": "so anyway as i was saying nice to meet you kwame", "expect": { "name": "Kwame", "evidence": "E1" } },
+
+    { "id": "cmd-rate-001", "category": "command-fast", "text": "lumen rememberthis", "note": "Command words merged at speed. Must not fire — a misfired capture is a privacy event.", "expect": { "command": null } },
+    { "id": "cmd-rate-002", "category": "command-fast", "text": "lumen remember this", "note": "control.", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-rate-003", "category": "command-filler", "text": "lumen um remember this", "note": "Filler between wake word and command.", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-rate-004", "category": "command-filler", "text": "lumen uh pause", "expect": { "command": "pause" } },
+    { "id": "cmd-rate-005", "category": "command-filler", "text": "lumen this is uh priya", "expect": { "command": "bind", "argument": "Priya", "name": "Priya", "evidence": "E0" } },
+    { "id": "cmd-nb-001", "category": "command-narrowband", "text": "loomen remember this", "note": "Wake word mangled in narrowband. Off by default until the Hour-1 false-trigger test says otherwise.", "expect": { "command": null } },
+    { "id": "cmd-nb-002", "category": "command-narrowband", "text": "lumen remember dis", "expect": { "command": null } },
+
+    { "id": "other-001", "category": "other-channel-degraded", "text": "im uh priya", "channel": "other", "expect": { "name": "Priya", "evidence": "E2" } },
+    { "id": "other-002", "category": "other-channel-degraded", "text": "my name is um marcus", "channel": "other", "expect": { "name": "Marcus", "evidence": "E2" } },
+    { "id": "other-003", "category": "other-channel-degraded", "text": "im pri", "channel": "other", "note": "Truncated on the attenuated channel — the worst case for a false bind.", "expect": { "name": null, "mustNotAssert": true } }
+  ]
+}
