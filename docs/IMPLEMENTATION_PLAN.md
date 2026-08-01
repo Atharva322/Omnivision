@@ -87,11 +87,28 @@ The system must reach full accuracy on glasses alone. If a phone mic is availabl
 pocket) its transcript is fused as a *bonus* channel. It is never a dependency, because a phone in a
 trouser pocket produces unusable audio and the demo cannot rest on where someone put their phone.
 
-**D2 — No continuous video stream. Photo capture on trigger only.**
-Continuous 720p30 buys nothing here: audio is what identifies people, and frames are needed only at
-conversation boundaries for face clustering. Continuous streaming would cost battery, add thermal
-load (v0.7 added `ThermalLevel` monitoring for a reason), and **compete with HFP for Bluetooth
-bandwidth** — degrading the audio the entire system depends on.
+**D2 — Minimum-cost stream, not zero stream.** *(revised at Track 0 — the original "photo capture
+only, no stream" is not implementable.)*
+
+`capturePhoto` is a method on `Stream`, not a standalone call — **a photo cannot be taken without an
+active stream.** So the question is not whether to stream, but how cheaply.
+
+```swift
+StreamConfiguration(videoCodec: .raw, resolution: .low, frameRate: 2)
+```
+
+Valid frame rates are `2, 7, 15, 24, 30`; resolutions are `.high` 720×1280, `.medium` 504×896,
+`.low` 360×640 (portrait). Meta's own guidance is counterintuitive and works in our favour:
+
+> "Lower resolution and frame rate yield higher visual quality due to less Bluetooth compression."
+
+So `.low` at 2 fps is not merely the cheapest option — **each frame is cleaner than a `.high` 30 fps
+frame**, which is exactly what face clustering needs. It also costs almost no bandwidth against the
+HFP audio the system depends on, and the SDK degrades quality automatically rather than failing when
+bandwidth is tight.
+
+Bonus: a 2 fps stream makes the Inner-tier **proactive announcement** ("Sarah's here") implementable,
+which was otherwise impossible with no continuous frames.
 
 **D3 — Faces cluster, they never identify.**
 A face produces an unlabeled cluster ID. It gains a name only when a name is *spoken*. A face match
@@ -239,6 +256,61 @@ enum Earcon { case captureOn, captureOff, saved, unknown, disconnected }
 
 ---
 
+## DAT v0.8.0 API reality — verified against the SDK repo, not from memory
+
+The latest SDK is **v0.8.0 (2026-06-25)**, newer than the v0.7 described in Meta's public blog posts.
+It contains breaking changes. Track B codes against this, not against blog examples.
+
+```swift
+import MWDATCore
+import MWDATCamera
+
+// 1. Session
+let wearables = Wearables.shared
+let session = try wearables.createSession(deviceSelector: AutoDeviceSelector(wearables: wearables))
+try session.start()
+for await state in session.stateStream() where state == .started { break }
+
+// 2. Stream — cheapest viable config (see D2)
+guard let stream = try session.addStream(
+    config: StreamConfiguration(videoCodec: .raw, resolution: .low, frameRate: 2)
+) else { return }   // session must be .started first
+
+// 3. Observe
+let frameToken = stream.videoFramePublisher.listen { frame in
+    guard let image = frame.makeUIImage() else { return }
+    // -> FaceCluster
+}
+let photoToken = stream.photoDataPublisher.listen { photo in
+    let data = photo.data          // -> high-quality decision frame
+}
+let stateToken = stream.statePublisher.listen { state in /* .streaming/.paused/.stopped */ }
+
+// 4. Lifecycle — SYNCHRONOUS in v0.8, no longer async
+stream.start()
+stream.capturePhoto(format: .jpeg)
+stream.stop()
+session.stop()
+```
+
+### v0.8 breaking changes that will bite
+
+| Was | Now |
+|---|---|
+| `Stream.start()` / `stop()` were `async` | **synchronous** — no `await`, no completion handlers |
+| `DeviceSession.addCapability(_:)` | `session.addStream(config:)` / `addDisplay(...)` |
+| `MockDeviceKit.pairRaybanMeta()` | `MockDeviceKit.pairGlasses(model: .rayBanMeta)` — now *throws* |
+| `MockRaybanMeta` protocol | `MockGlasses` |
+| ad-hoc error types | `DatError` protocol; new `CaptureError`, `RegistrationError.timeout` |
+
+`StreamState` transitions: `stopping → stopped → waitingForDevice → starting → streaming → paused`.
+
+**v0.8 also added a WiFi transport**, listed in the changelog with no further documentation. If it
+carries the video stream off Bluetooth it would remove the audio/video contention entirely — worth
+one MCP query at Hour 0, but do not build on it unconfirmed.
+
+---
+
 ## The name-binding mechanism (this is the product)
 
 ### Evidence ladder
@@ -333,9 +405,14 @@ claude mcp list   # expect: wearables ... ✔ Connected
 - [ ] **Clone the SDK repo locally** (not just SPM) — it ships `.claude-plugin/`, `AGENTS.md`,
       `.cursor/rules/`, and Copilot instructions covering streaming patterns, MockDeviceKit, session
       lifecycle, permissions, and debugging. Free, and already written.
-- [ ] **A: create the Developer Center org, add all 5 members, create a `demo` release channel.**
-      This is how teammates get builds onto their own glasses without TestFlight. Doing it at Hour 0
-      means the freeze build is not the first upload anyone has ever attempted.
+- [ ] ~~Create the Developer Center org and a `demo` release channel~~ — **SKIP. Do not do this.**
+      It requires a **Meta Managed Account org at `work.meta.com`** (a business-account flow under
+      your company's official name), and only members of that MMA org can join the team. Verification
+      gated, unbounded wait, zero payoff here: **Developer Mode alone runs your app on your own
+      glasses with no org, project, or release channel.** Release channels only matter for pushing
+      builds to *other people's* glasses — one pair, one Track B engineer, not needed.
+      Revisit only if a second person's glasses must run the build. Note the account types differ:
+      team members need **MMA**, release-channel testers need ordinary **Meta accounts**.
 - [ ] **A: ask Meta directly whether anonymous face clustering is permitted under the DAT Acceptable
       Use Policy** (question 5 in `DEVELOPER_CENTER.md`). Faster and more reliable than reading the
       AUP ourselves, and it is the only open question that can force a design change.

@@ -1,6 +1,14 @@
+.DS_Store
+.env
+.env.local
+
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# SwiftPM (Track C package)
 .build/
 .swiftpm/
 Package.resolved
-*.xcuserstate
-xcuserdata/
-DerivedData/
