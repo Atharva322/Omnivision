@@ -2,6 +2,8 @@ import Foundation
 
 public enum PersonStoreError: Error, Equatable {
     case personNotFound(UUID)
+    case invalidName
+    case invalidPendingNote
 }
 
 public actor PersonStore {
@@ -29,7 +31,9 @@ public actor PersonStore {
     }
 
     public func find(name: String) -> Person? {
-        let key = name.accessLensIdentityKey
+        guard let key = Self.normalizedIdentityKey(from: name) else {
+            return nil
+        }
         return peopleByID.values.first { $0.name.accessLensIdentityKey == key }
     }
 
@@ -40,6 +44,10 @@ public actor PersonStore {
     @discardableResult
     public func upsert(_ person: Person) throws -> Person {
         var updated = person
+        updated.name = Self.normalizedDisplayText(updated.name) ?? updated.name
+        updated.org = Self.normalizedDisplayText(updated.org)
+        updated.pendingNotes = updated.pendingNotes.compactMap(Self.normalizedDisplayText)
+        updated.clusterIDs = Array(Set(updated.clusterIDs))
         applyDerivedTier(to: &updated)
         peopleByID[updated.id] = updated
         try save()
@@ -47,25 +55,37 @@ public actor PersonStore {
     }
 
     @discardableResult
-    public func bind(name: String, org: String? = nil, clusterID: UUID? = nil) throws -> Person {
-        if var existing = find(name: name) {
-            if existing.org == nil {
-                existing.org = org
+    public func bind(
+        name: String,
+        org: String? = nil,
+        clusterID: UUID? = nil,
+        at: Date = Date()
+    ) throws -> Person {
+        guard let normalizedName = Self.normalizedDisplayText(name) else {
+            throw PersonStoreError.invalidName
+        }
+        let normalizedOrg = Self.normalizedDisplayText(org)
+
+        if var existing = find(name: normalizedName) {
+            existing.name = normalizedName
+            if let normalizedOrg, (existing.org?.isEmpty ?? true) {
+                existing.org = normalizedOrg
             }
             if let clusterID, !existing.clusterIDs.contains(clusterID) {
                 existing.clusterIDs.append(clusterID)
             }
-            if existing.lastEncounterAt == nil {
-                existing.lastEncounterAt = Date()
+            existing.lastEncounterAt = at
+            if existing.encounterCount == 0 {
+                existing.encounterCount = 1
             }
             return try upsert(existing)
         }
 
         var person = Person(
-            name: name,
-            org: org,
+            name: normalizedName,
+            org: normalizedOrg,
             tier: .newPerson,
-            lastEncounterAt: Date(),
+            lastEncounterAt: at,
             encounterCount: 1,
             clusterIDs: clusterID.map { [$0] } ?? []
         )
@@ -88,8 +108,8 @@ public actor PersonStore {
 
         person.encounterCount += 1
         person.lastEncounterAt = at
-        if let summary {
-            person.lastSummary = summary
+        if let normalizedSummary = Self.normalizedDisplayText(summary) {
+            person.lastSummary = normalizedSummary
         }
         if let clusterID, !person.clusterIDs.contains(clusterID) {
             person.clusterIDs.append(clusterID)
@@ -103,10 +123,13 @@ public actor PersonStore {
 
     @discardableResult
     public func addPendingNote(_ note: String, to personID: UUID) throws -> Person {
+        guard let normalizedNote = Self.normalizedDisplayText(note) else {
+            throw PersonStoreError.invalidPendingNote
+        }
         guard var person = peopleByID[personID] else {
             throw PersonStoreError.personNotFound(personID)
         }
-        person.pendingNotes.append(note)
+        person.pendingNotes.append(normalizedNote)
         peopleByID[person.id] = person
         try save()
         return person
@@ -182,6 +205,19 @@ public actor PersonStore {
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("AccessLens", isDirectory: true)
         #endif
+    }
+
+    private static func normalizedDisplayText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let collapsed = value
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return collapsed.isEmpty ? nil : collapsed
+    }
+
+    private static func normalizedIdentityKey(from value: String) -> String? {
+        normalizedDisplayText(value)?.accessLensIdentityKey
     }
 }
 

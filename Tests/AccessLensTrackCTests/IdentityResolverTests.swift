@@ -35,6 +35,19 @@ final class IdentityResolverTests: XCTestCase {
         XCTAssertEqual(person.name, "Priya")
     }
 
+    func testKnownLookupIsCaseInsensitive() {
+        let resolver = IdentityResolver(people: [person(name: "Priya")])
+        let state = resolver.resolve(
+            names: [candidate("priya", NameTemplateID.niceToMeetOrSeeYou, .wearer, 0.9)],
+            cluster: nil
+        )
+
+        guard case .known(let matched) = state else {
+            return XCTFail("expected .known, got \(state)")
+        }
+        XCTAssertEqual(matched.name, "Priya")
+    }
+
     func testFaceMatchAloneNeverAsserts() {
         let cluster = UUID()
         let resolver = IdentityResolver(people: [person(name: "Priya", clusterIDs: [cluster])])
@@ -60,6 +73,23 @@ final class IdentityResolverTests: XCTestCase {
             return XCTFail("expected .ambiguous, got \(state)")
         }
         XCTAssertEqual(Set(names), ["Priya", "Marcus"])
+    }
+
+    func testConflictingNamesAreDeduplicatedCaseInsensitively() {
+        let resolver = IdentityResolver()
+        let state = resolver.resolve(
+            names: [
+                candidate("Priya", NameTemplateID.niceToMeetOrSeeYou, .wearer, 0.80),
+                candidate("priya", NameTemplateID.thanks, .wearer, 0.79),
+                candidate("Marcus", NameTemplateID.greeting, .wearer, 0.78)
+            ],
+            cluster: nil
+        )
+
+        guard case .ambiguous(let names) = state else {
+            return XCTFail("expected .ambiguous, got \(state)")
+        }
+        XCTAssertEqual(names, ["Priya", "Marcus"])
     }
 
     func testNoEvidenceAndNoClusterReturnsNothing() {

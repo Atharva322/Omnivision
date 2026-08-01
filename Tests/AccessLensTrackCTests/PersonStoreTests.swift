@@ -34,6 +34,49 @@ final class PersonStoreTests: XCTestCase {
         XCTAssertEqual(person.tier, .inner)
     }
 
+    func testExistingBindRefreshesContextAndMergesCluster() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let firstCluster = UUID()
+        let secondCluster = UUID()
+        let firstSeen = Date(timeIntervalSince1970: 10)
+        let secondSeen = Date(timeIntervalSince1970: 20)
+
+        let saved = try await store.bind(name: "Priya", clusterID: firstCluster, at: firstSeen)
+        let rebound = try await store.bind(name: "  Priya  ", org: "Stripe", clusterID: secondCluster, at: secondSeen)
+
+        XCTAssertEqual(saved.id, rebound.id)
+        XCTAssertEqual(rebound.org, "Stripe")
+        XCTAssertEqual(Set(rebound.clusterIDs), [firstCluster, secondCluster])
+        XCTAssertEqual(rebound.lastEncounterAt, secondSeen)
+    }
+
+    func testBlankNameIsRejected() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+
+        do {
+            _ = try await store.bind(name: "   ")
+            XCTFail("expected invalidName")
+        } catch let error as PersonStoreError {
+            XCTAssertEqual(error, .invalidName)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
+    func testBlankPendingNoteIsRejected() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let saved = try await store.bind(name: "Priya")
+
+        do {
+            _ = try await store.addPendingNote("   ", to: saved.id)
+            XCTFail("expected invalidPendingNote")
+        } catch let error as PersonStoreError {
+            XCTAssertEqual(error, .invalidPendingNote)
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
     func testSaveAndReloadPersistsPendingNotes() async throws {
         let url = temporaryStoreURL()
         let store = try PersonStore(url: url)

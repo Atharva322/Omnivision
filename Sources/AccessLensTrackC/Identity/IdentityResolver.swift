@@ -37,7 +37,7 @@ public struct IdentityResolver: IdentityResolving {
             return fallback(cluster: cluster)
 
         case .requiresDisambiguation:
-            return .ambiguous(assessment.conflicting.map(\.name))
+            return .ambiguous(uniqueNames(from: assessment.conflicting))
 
         case .insufficient:
             return fallback(cluster: cluster)
@@ -80,6 +80,20 @@ public struct IdentityResolver: IdentityResolving {
             copy.clusterIDs.append(cluster)
         }
         return copy
+    }
+
+    private func uniqueNames(from candidates: [NameCandidate]) -> [String] {
+        var seen: Set<String> = []
+        var names: [String] = []
+
+        for candidate in candidates {
+            let key = candidate.name.accessLensIdentityKey
+            if seen.insert(key).inserted {
+                names.append(candidate.name)
+            }
+        }
+
+        return names
     }
 }
 

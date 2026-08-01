@@ -38,7 +38,12 @@ public actor EventLog {
         metadata: [String: String] = [:],
         at: Date = Date()
     ) throws {
-        let entry = EventLogEntry(at: at, category: category, message: message, metadata: metadata)
+        let entry = EventLogEntry(
+            at: at,
+            category: category,
+            message: Self.sanitized(message),
+            metadata: Self.sanitized(metadata)
+        )
         entries.append(entry)
         try persist(entry)
     }
@@ -74,9 +79,44 @@ public actor EventLog {
             metadata["cluster"] = cluster.uuidString
         }
         if !assessment.conflicting.isEmpty {
-            metadata["conflicts"] = assessment.conflicting.map(\.name).joined(separator: ",")
+            metadata["conflicts"] = uniqueNames(from: assessment.conflicting).joined(separator: ",")
         }
         try append(category: "identity.evidence", message: assessment.rationale, metadata: metadata)
+    }
+
+    public func logResolution(_ state: IdentityState, cluster: UUID?) throws {
+        var metadata: [String: String] = [
+            "state": resolutionLabel(for: state)
+        ]
+
+        switch state {
+        case .known(let person), .likely(let person):
+            metadata["personID"] = person.id.uuidString
+            metadata["name"] = person.name
+            metadata["tier"] = person.effectiveTier.rawValue
+            if let lastSummary = person.lastSummary {
+                metadata["summary"] = lastSummary
+            }
+            if !person.pendingNotes.isEmpty {
+                metadata["pendingNotes"] = person.pendingNotes.joined(separator: " | ")
+            }
+        case .ambiguous(let names):
+            metadata["options"] = names.joined(separator: ",")
+        case .unnamedCluster(let unresolvedCluster):
+            metadata["cluster"] = unresolvedCluster.uuidString
+        case .nothing:
+            break
+        }
+
+        if let cluster {
+            metadata["observedCluster"] = cluster.uuidString
+        }
+
+        try append(
+            category: "identity.resolution",
+            message: resolutionMessage(for: state),
+            metadata: metadata
+        )
     }
 
     public func snapshot() -> [EventLogEntry] {
@@ -145,5 +185,66 @@ public actor EventLog {
             ?? FileManager.default.temporaryDirectory
         return base.appendingPathComponent("AccessLens", isDirectory: true)
         #endif
+    }
+
+    private static func sanitized(_ message: String) -> String {
+        message
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func sanitized(_ metadata: [String: String]) -> [String: String] {
+        var sanitizedMetadata: [String: String] = [:]
+        for (key, value) in metadata {
+            sanitizedMetadata[key] = sanitized(value)
+        }
+        return sanitizedMetadata
+    }
+
+    private func uniqueNames(from candidates: [NameCandidate]) -> [String] {
+        var seen: Set<String> = []
+        var names: [String] = []
+
+        for candidate in candidates {
+            let key = candidate.name
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            if seen.insert(key).inserted {
+                names.append(candidate.name)
+            }
+        }
+
+        return names
+    }
+
+    private func resolutionLabel(for state: IdentityState) -> String {
+        switch state {
+        case .known:
+            return "known"
+        case .likely:
+            return "likely"
+        case .ambiguous:
+            return "ambiguous"
+        case .unnamedCluster:
+            return "unnamedCluster"
+        case .nothing:
+            return "nothing"
+        }
+    }
+
+    private func resolutionMessage(for state: IdentityState) -> String {
+        switch state {
+        case .known(let person):
+            return "resolved known person \(person.name)"
+        case .likely(let person):
+            return "resolved likely person \(person.name)"
+        case .ambiguous(let names):
+            return "ambiguous resolution: \(names.joined(separator: ", "))"
+        case .unnamedCluster:
+            return "no name resolved; storing unnamed cluster"
+        case .nothing:
+            return "no identity evidence available"
+        }
     }
 }
