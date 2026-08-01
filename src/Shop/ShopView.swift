@@ -250,7 +250,12 @@ final class ShopSession {
             }
             await scan(frame, mode: .requested)
 
-        case .rememberThisOne:
+        case .rememberThisOne, .rememberThis:
+            // Both phrasings act here. The grammar distinguishes them because on the SOCIAL screen
+            // "remember this" starts a conversation capture — a meaning with no counterpart while
+            // shopping. Leaving it unhandled meant the wearer said a perfectly reasonable sentence
+            // and got total silence, which to someone who cannot see the screen is indistinguishable
+            // from a crash. Observed on device.
             await rememberProductInFrame()
 
         case .thatsWrong:

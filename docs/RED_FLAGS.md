@@ -348,6 +348,40 @@ inventing an answer it could not read off the package.
 
 ---
 
+### 32. The shop loop: a dedupe key is a metronome, not a fix
+
+Reported by the wearer as an infinite loop, and it was one. 415 scans of a single loaf produced
+`.brandOnly` on every frame, each with different OCR noise as the "variant":
+
+    This is SOURDOUGH. I see AT 1020 089 00000, but I don't have a variant saved to compare.
+    This is SOURDOUGH. I see NET AT 24 02 1 18 8 00 L, but I don't have a variant saved to compare.
+    This is SOURDOUGH. I see 1 ma, but I don't have a variant saved to compare.
+    This is SOURDOUGH. I see (WATER FRONTIN, but I don't have a variant saved to compare.
+
+The dedupe key held it to one utterance per 90-second cooldown, which reads as "suppression
+working" in the transcript and as a metronome in the wearer's ear. **Suppressing a repeat is not
+the same as deciding it should never have been said.**
+
+Two fixes: `.brandOnly` is now `.requested`-only (it carries no news proactively — the wearer is
+holding the thing), and a `speakableVariant` filter refuses to recite text that is mostly digits or
+under three letters. Weights and barcode fragments were being read aloud as if they named a
+variant, which sounds like information and is not.
+
+### 33. "Lumen, remember this" did nothing at all
+
+The grammar has `remember this one` → `.rememberThisOne` and `remember this` → `.rememberThis`.
+The shop screen only handled the first; the second fell through to `default:` and logged. The
+wearer said a perfectly reasonable sentence and got **total silence** — indistinguishable from a
+crash to someone who cannot see the screen.
+
+The distinction is real on the social screen, where "remember this" starts a conversation capture.
+It has no counterpart while shopping, so both phrasings now act.
+
+**Silence is never a safe default in an audio-only interface.** Every unhandled command needs an
+audible outcome, even if that outcome is "I can't do that here."
+
+---
+
 ## LOW — cleanup, but permanent if ignored
 
 ### 14. 15 MB of JPEGs are in git
@@ -393,7 +427,7 @@ Not everything is a risk. These are measured, not assumed:
 - **Name binding end-to-end on hardware** — `"Nice to meet you Priya"` → `ASSERT — Priya`, and
   `"Lumen, this is Priya"` → explicit bind, both observed live.
 - **Package text OCR at confidence 1.00** at both 30 cm and 1 m, with no aiming.
-- **347 tests passing**, including regression tests pinning every bug found this week. Runnable on
+- **356 tests passing**, including regression tests pinning every bug found this week. Runnable on
   Linux too — `scripts/swift-linux.sh test` runs the whole suite in the `swift:6.0` container, so
   validating a change does not require a Mac.
 - **222 fixture examples with zero false assertions and zero safety violations** in the Track C
