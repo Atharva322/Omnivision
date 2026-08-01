@@ -1,20 +1,28 @@
 //
 // AudioSpine.swift
+// Track B — glasses microphone capture over Bluetooth HFP.
 //
-// Owns AVAudioSession + AVAudioEngine for glasses microphone capture over Bluetooth HFP.
+// iOS ONLY. `AVAudioSession` does not exist on macOS or Linux, which is why this file lives in the
+// app target and not in the AccessLensTrackC package (that package must stay Linux-buildable).
 //
-// Hard rules (see Omnivision docs/IMPLEMENTATION_PLAN.md):
-//  - `.allowBluetooth` is what enables HFP (8 kHz mono). `.allowBluetoothA2DP` is output-only.
+// Conforms to `AudioSpining` from AccessLensTrackC/Core/Protocols.swift. Track A owns that
+// contract; Track B adopts it.
+//
+// Hard rules:
+//  - `.allowBluetooth` is what enables HFP. `.allowBluetoothA2DP` is output-only.
 //  - HFP must be fully configured and ACTIVE before any DAT stream that needs audio starts.
-//  - If the route is not HFP we are silently on the phone mic. That must be SURFACED, never
-//    hidden — a silent fallback is a lie about coverage, and a blind user cannot see a UI badge.
+//  - If the route is not HFP we are on the phone mic. That must be SURFACED, never hidden —
+//    a blind wearer cannot see a UI badge, and G1's 16 kHz finding came from checking this.
 //
+
+#if os(iOS)
 
 import AVFoundation
 import Foundation
+import AccessLensTrackC
 
 @Observable
-final class AudioSpine {
+final class AudioSpine: AudioSpining {
 
   enum RouteKind: String {
     case glassesHFP = "Glasses — Bluetooth HFP"
@@ -22,9 +30,17 @@ final class AudioSpine {
     case otherRoute = "Other / unknown route"
     case inactive = "Not started"
 
-    /// Only the HFP route proves we are actually capturing from the glasses.
     var isGlasses: Bool { self == .glassesHFP }
   }
+
+  enum AudioSpineError: LocalizedError {
+    case noUsableInput
+    var errorDescription: String? {
+      "Input format has zero sample rate — no usable input route."
+    }
+  }
+
+  // MARK: - Observable diagnostics (UI only; not part of the contract)
 
   private(set) var route: RouteKind = .inactive
   private(set) var inputPortName = "—"
@@ -33,13 +49,31 @@ final class AudioSpine {
   private(set) var isRunning = false
   private(set) var lastError: String?
 
-  /// Called for every captured PCM buffer. `SpeechStream` subscribes to this.
-  var onBuffer: ((AVAudioPCMBuffer) -> Void)?
+  /// Not in `AudioSpining` — it should be. Without it a silent fallback to the phone microphone
+  /// looks identical to success. Proposed for the protocol; see docs/INTEGRATION.md.
+  var isGlassesRoute: Bool { route.isGlasses }
+
+  // MARK: - AudioSpining
+
+  /// Every captured PCM buffer. Replaces the previous `onBuffer` closure so this type satisfies
+  /// `AudioSpining`, and so multiple consumers (SpeechStream, a level meter, a recorder) can
+  /// attach without fighting over one closure slot.
+  /// `@ObservationIgnored` because @Observable rewrites stored properties into computed ones,
+  /// which forbids `lazy` and makes no sense for a stream anyway — nothing observes its identity.
+  @ObservationIgnored let pcmStream: AsyncStream<AVAudioPCMBuffer>
+  @ObservationIgnored private let bufferContinuation: AsyncStream<AVAudioPCMBuffer>.Continuation
 
   private let engine = AVAudioEngine()
   private var tapInstalled = false
 
   init() {
+    // Bounded on purpose: audio arrives faster than a lagging consumer drains it, and an
+    // unbounded stream would grow without limit. Dropping the oldest buffers is the right
+    // failure — stale audio is worthless for live recognition.
+    var continuation: AsyncStream<AVAudioPCMBuffer>.Continuation!
+    pcmStream = AsyncStream(bufferingPolicy: .bufferingNewest(64)) { continuation = $0 }
+    bufferContinuation = continuation
+
     NotificationCenter.default.addObserver(
       forName: AVAudioSession.routeChangeNotification,
       object: nil,
@@ -49,44 +83,37 @@ final class AudioSpine {
     }
   }
 
-  // MARK: - Lifecycle
+  func start() async throws {
+    let session = AVAudioSession.sharedInstance()
 
-  func start() {
-    do {
-      let session = AVAudioSession.sharedInstance()
+    // `.allowBluetooth` enables the HFP input path. Without it we get A2DP, which is output-only,
+    // and the microphone silently falls back to the phone.
+    try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth])
+    try session.setActive(true, options: .notifyOthersOnDeactivation)
 
-      // `.allowBluetooth` enables the HFP input path. Without it we get A2DP, which is
-      // output-only, and the microphone silently falls back to the phone.
-      try session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetooth])
-      try session.setActive(true, options: .notifyOthersOnDeactivation)
+    refreshRoute()
 
-      refreshRoute()
+    let input = engine.inputNode
+    let format = input.outputFormat(forBus: 0)
+    sampleRate = format.sampleRate
+    channelCount = format.channelCount
 
-      let input = engine.inputNode
-      let format = input.outputFormat(forBus: 0)
-      sampleRate = format.sampleRate
-      channelCount = format.channelCount
-
-      guard format.sampleRate > 0 else {
-        lastError = "Input format has zero sample rate — no usable input route."
-        return
-      }
-
-      if !tapInstalled {
-        input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
-          self?.onBuffer?(buffer)
-        }
-        tapInstalled = true
-      }
-
-      engine.prepare()
-      try engine.start()
-      isRunning = true
-      lastError = nil
-    } catch {
-      lastError = error.localizedDescription
-      isRunning = false
+    guard format.sampleRate > 0 else {
+      lastError = AudioSpineError.noUsableInput.localizedDescription
+      throw AudioSpineError.noUsableInput
     }
+
+    if !tapInstalled {
+      input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
+        self?.bufferContinuation.yield(buffer)
+      }
+      tapInstalled = true
+    }
+
+    engine.prepare()
+    try engine.start()
+    isRunning = true
+    lastError = nil
   }
 
   func stop() {
@@ -102,8 +129,8 @@ final class AudioSpine {
 
   // MARK: - Route inspection
 
-  /// The single most important diagnostic in this file. 8 kHz mono confirms HFP;
-  /// 44.1/48 kHz means we are on the phone and the whole premise is untested.
+  /// The single most important diagnostic here. 16 kHz mono confirms wideband HFP from the
+  /// glasses; 44.1/48 kHz means we are on the phone and every downstream assumption is untested.
   private func refreshRoute() {
     let inputs = AVAudioSession.sharedInstance().currentRoute.inputs
 
@@ -116,12 +143,9 @@ final class AudioSpine {
     inputPortName = port.portName
 
     switch port.portType {
-    case .bluetoothHFP:
-      route = .glassesHFP
-    case .builtInMic:
-      route = .phoneMic
-    default:
-      route = .otherRoute
+    case .bluetoothHFP: route = .glassesHFP
+    case .builtInMic:   route = .phoneMic
+    default:            route = .otherRoute
     }
   }
 
@@ -129,9 +153,9 @@ final class AudioSpine {
 
   static func requestMicrophonePermission() async -> Bool {
     await withCheckedContinuation { continuation in
-      AVAudioApplication.requestRecordPermission { granted in
-        continuation.resume(returning: granted)
-      }
+      AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
     }
   }
 }
+
+#endif
