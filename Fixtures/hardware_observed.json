@@ -1,0 +1,55 @@
+{
+  "name": "hardware_observed",
+  "description": "Transcripts ACTUALLY EMITTED by SFSpeechRecognizer on the Ray-Ban Meta glasses during the on-device run of 2026-08-01 (route: Glasses HFP, 16000 Hz, quiet room, 8 exchanges). Recorded in docs/RED_FLAGS.md. Unlike every other fixture file here, these were not written by anyone — they are what the recogniser produced. That makes them the only regression tests in the suite backed by real acoustics, and the reason to keep adding to this file after every hardware session. Expectations cover only what Track C owns: the command parsed and the name extracted. Announcement suppression (repeatedTooSoon, wearerAskedForSilence) is Track D's layer and sits downstream of everything asserted here.",
+  "cases": [
+    {
+      "id": "hw-001",
+      "category": "device-observed",
+      "text": "Nice to meet you Priya",
+      "note": "Spoke 'Priya. Saved.' on device.",
+      "expect": { "name": "Priya", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you", "disposition": "assert" }
+    },
+    {
+      "id": "hw-002",
+      "category": "device-observed",
+      "text": "Lumen, this is Marcus",
+      "note": "Explicit bind; spoke 'Marcus. Saved.'",
+      "expect": { "command": "bind", "argument": "Marcus", "name": "Marcus", "evidence": "E0", "template": "e0.explicit_bind", "disposition": "assert" }
+    },
+    {
+      "id": "hw-003",
+      "category": "device-observed",
+      "text": "Nice to meet you Priya",
+      "note": "Second time. Extraction is unchanged — the hold was repeatedTooSoon at the narration layer, which is downstream of Track C.",
+      "expect": { "name": "Priya", "evidence": "E1", "disposition": "assert" }
+    },
+    {
+      "id": "hw-004",
+      "category": "device-observed",
+      "text": "Lumen, pause",
+      "note": "Earcon, then genuine silence.",
+      "expect": { "command": "pause" }
+    },
+    {
+      "id": "hw-005",
+      "category": "device-observed",
+      "text": "Nice to meet you Sarah",
+      "note": "Held by wearerAskedForSilence — again a narration decision, not an extraction one.",
+      "expect": { "name": "Sarah", "evidence": "E1", "disposition": "assert" }
+    },
+    {
+      "id": "hw-006",
+      "category": "device-observed",
+      "text": "Repeat",
+      "note": "No wake word. Correctly ignored on device.",
+      "expect": { "command": null, "name": null }
+    },
+    {
+      "id": "hw-007",
+      "category": "device-observed-degraded",
+      "text": "Nice to meet you you",
+      "note": "THE ONE THAT MATTERS. The recogniser mangled a real name into 'you'. The system produced no candidate rather than binding 'you' as a person — precision over recall holding on genuinely degraded input, which is what the accuracy claim rests on. Two independent guards catch it: the repetition repair collapses 'you you' to 'you', leaving an empty name slot, and 'you' is a common word the validator rejects outright.",
+      "expect": { "name": null, "mustNotAssert": true }
+    }
+  ]
+}
