@@ -33,11 +33,22 @@ public struct BarcodeScanner: Sendable {
     ///
     /// Returning nil rather than throwing for "no barcode" is deliberate — an empty frame is the
     /// normal case while the wearer is still moving the package, not an error condition.
-    public func payload(in image: CGImage) async throws -> String? {
+    /// - Parameter orientation: which way up the frame actually is.
+    ///
+    ///   The glasses stream is portrait and frames arrive rotated — a photo captured through the
+    ///   app came back 90 degrees off. Vision is TOLD the orientation rather than the image being
+    ///   re-rendered upright: faster, lossless, and it keeps the caller from having to know how
+    ///   Core Graphics rotation works.
+    public func payload(
+        in image: CGImage,
+        orientation: CGImagePropertyOrientation = .up
+    ) async throws -> String? {
         let request = VNDetectBarcodesRequest()
         request.symbologies = Self.retailSymbologies
 
-        try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+        try VNImageRequestHandler(
+            cgImage: image, orientation: orientation, options: [:]
+        ).perform([request])
 
         guard let observations = request.results, !observations.isEmpty else { return nil }
 

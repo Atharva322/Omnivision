@@ -71,6 +71,28 @@ final class BarcodeScannerTests: XCTestCase {
         XCTAssertEqual(catalog.recognize(barcode: payload, inCategory: "milk"), .unreadable)
     }
 
+    /// The glasses stream is portrait and frames arrive rotated — a photo captured through the
+    /// app came back 90 degrees off. Vision is told the orientation rather than the image being
+    /// re-rendered, which is both faster and lossless.
+    func testReadsABarcodeFromARotatedFrame() async throws {
+        let upright = try barcodeImage(payload: "7394376616068")
+
+        // Rotate the raster 90 degrees, exactly as an unrotated glasses frame arrives.
+        let context = CIContext()
+        let rotated = CIImage(cgImage: upright)
+            .transformed(by: CGAffineTransform(rotationAngle: .pi / 2))
+        let normalised = rotated.transformed(
+            by: CGAffineTransform(translationX: -rotated.extent.origin.x,
+                                  y: -rotated.extent.origin.y))
+        let image = try XCTUnwrap(context.createCGImage(normalised, from: normalised.extent))
+
+        let payload = try await BarcodeScanner().payload(in: image, orientation: .right)
+
+        XCTAssertEqual(
+            payload, "7394376616068",
+            "a rotated frame must read once Vision is told which way is up")
+    }
+
     /// Barcodes are rarely centred and upright when a blind wearer holds a carton up.
     func testReadsABarcodeThatIsNotCentredInTheFrame() async throws {
         let barcode = try barcodeImage(payload: "0025293002012")
