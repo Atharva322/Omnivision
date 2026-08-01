@@ -124,6 +124,15 @@ struct AudioProbeView: View {
       }
       .pickerStyle(.segmented)
 
+      // A WER number without a distance is meaningless — intimate range flatters the
+      // recogniser and says nothing about a real conversation.
+      Picker("Distance", selection: $speech.currentDistance) {
+        ForEach(Distance.allCases) { distance in
+          Text(distance.label).tag(distance)
+        }
+      }
+      .pickerStyle(.segmented)
+
       VStack(alignment: .leading, spacing: 4) {
         Text("READ THIS ALOUD — both speakers, same words")
           .font(.system(size: 11, weight: .bold))
@@ -153,40 +162,63 @@ struct AudioProbeView: View {
         .font(.system(size: 12, weight: .bold))
         .foregroundStyle(.secondary)
 
-      ForEach(Channel.allCases, id: \.self) { channel in
-        HStack(spacing: 8) {
-          Text(channel.rawValue)
-            .font(.system(size: 15, weight: .semibold, design: .monospaced))
-          // Getting the NAME right matters more than overall transcript quality.
-          Image(systemName: speech.capturedName(for: channel) ? "checkmark.seal.fill" : "xmark.seal")
-            .foregroundStyle(speech.capturedName(for: channel) ? .green : .secondary)
-            .font(.system(size: 13))
-          Spacer()
-          Text("n=\(speech.count(for: channel))")
-            .font(.system(size: 13, design: .monospaced))
-            .foregroundStyle(.secondary)
-          Text(percent(speech.bestWER(for: channel)))
-            .font(.system(size: 17, weight: .bold, design: .monospaced))
-            .foregroundStyle(werColor(speech.bestWER(for: channel)))
+      // Envelope table: WER per channel per distance. This is the artefact Track C/D needs —
+      // knowing where transcription degrades is what lets the app tell the user to step closer
+      // instead of silently failing.
+      Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
+        GridRow {
+          Text("").frame(width: 56, alignment: .leading)
+          ForEach(Distance.allCases) { distance in
+            Text(distance.label)
+              .font(.system(size: 11, weight: .bold, design: .monospaced))
+              .foregroundStyle(distance.isRealistic ? .primary : .secondary)
+              .frame(maxWidth: .infinity)
+          }
+        }
+        ForEach(Channel.allCases, id: \.self) { channel in
+          GridRow {
+            Text(channel == .wearer ? "WEAR" : "OTHER")
+              .font(.system(size: 12, weight: .semibold, design: .monospaced))
+              .frame(width: 56, alignment: .leading)
+            ForEach(Distance.allCases) { distance in
+              let wer = speech.bestWER(for: channel, at: distance)
+              VStack(spacing: 1) {
+                Text(percent(wer))
+                  .font(.system(size: 14, weight: .bold, design: .monospaced))
+                  .foregroundStyle(werColor(wer))
+                if speech.count(for: channel, at: distance) > 0 {
+                  Image(
+                    systemName: speech.capturedName(for: channel, at: distance)
+                      ? "checkmark.seal.fill" : "xmark.seal"
+                  )
+                  .font(.system(size: 9))
+                  .foregroundStyle(
+                    speech.capturedName(for: channel, at: distance) ? .green : .red)
+                }
+              }
+              .frame(maxWidth: .infinity)
+            }
+          }
         }
       }
 
-      Text("✓ = the name \u{201C}Priya\u{201D} was captured — the only thing identity binding needs")
+      Text("✓ = the name \u{201C}Priya\u{201D} survived. Bold columns are real conversation range.")
         .font(.system(size: 11))
         .foregroundStyle(.secondary)
 
       Divider()
 
-      if let wearer = speech.bestWER(for: .wearer),
-         let other = speech.bestWER(for: .other) {
+      // Only the realistic buckets decide the design. 0.3m results are not evidence.
+      if let wearer = realisticWER(.wearer), let other = realisticWER(.other) {
         Text(verdict(wearerWER: wearer, otherWER: other))
           .font(.system(size: 14, weight: .semibold))
           .foregroundStyle(.primary)
           .fixedSize(horizontal: false, vertical: true)
       } else {
-        Text("Read the script aloud tagged as both WEARER and OTHER to get a verdict.")
+        Text("Need readings at 0.6m or 1.0m from BOTH speakers. Anything at 0.3m is intimate range and does not represent a conversation.")
           .font(.system(size: 13))
-          .foregroundStyle(.secondary)
+          .foregroundStyle(.orange)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Text("recognizer rotations: \(speech.rotations)")
@@ -199,7 +231,15 @@ struct AudioProbeView: View {
     .clipShape(RoundedRectangle(cornerRadius: 16))
   }
 
-  /// Three possible worlds, and they imply different designs.
+  /// Best WER across the buckets that represent an actual conversation (0.6m / 1.0m).
+  private func realisticWER(_ channel: Channel) -> Double? {
+    Distance.allCases
+      .filter(\.isRealistic)
+      .compactMap { speech.bestWER(for: channel, at: $0) }
+      .min()
+  }
+
+  /// Four possible worlds, and they imply different designs.
   private func verdict(wearerWER: Double, otherWER: Double) -> String {
     let bothUsable = wearerWER < 0.4 && otherWER < 0.4
     if bothUsable {

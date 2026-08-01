@@ -26,10 +26,35 @@ enum Channel: String, CaseIterable {
   case other = "OTHER"
 }
 
+/// Speaker distance bucket. A result is only meaningful paired with the range it was taken at —
+/// intimate distance flatters the recogniser and tells us nothing about a real conversation.
+enum Distance: Double, CaseIterable, Identifiable {
+  case intimate = 0.3
+  case close = 0.6
+  case conversational = 1.0
+  case social = 2.0
+
+  var id: Double { rawValue }
+
+  var label: String {
+    switch self {
+    case .intimate: return "0.3m"
+    case .close: return "0.6m"
+    case .conversational: return "1.0m"
+    case .social: return "2.0m"
+    }
+  }
+
+  /// The range people actually stand at when meeting someone. This is the bucket that decides
+  /// the design; the others map the envelope either side of it.
+  var isRealistic: Bool { self == .close || self == .conversational }
+}
+
 struct Utterance: Identifiable {
   let id = UUID()
   let text: String
   let channel: Channel
+  let distance: Distance
   let confidence: Float
   let at: Date
 }
@@ -43,8 +68,9 @@ final class SpeechStream {
   private(set) var lastError: String?
   private(set) var rotations = 0
 
-  /// Operator-controlled tag applied to the next finalized utterance.
+  /// Operator-controlled tags applied to the next finalized utterance.
   var currentChannel: Channel = .wearer
+  var currentDistance: Distance = .conversational
 
   private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
   private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -175,7 +201,9 @@ final class SpeechStream {
     // never silently discards speech.
     if !partialText.isEmpty {
       utterances.append(
-        Utterance(text: partialText, channel: currentChannel, confidence: -1, at: Date())
+        Utterance(
+          text: partialText, channel: currentChannel,
+          distance: currentDistance, confidence: -1, at: Date())
       )
       partialText = ""
     }
@@ -194,7 +222,9 @@ final class SpeechStream {
       : segments.map(\.confidence).reduce(0, +) / Float(segments.count)
 
     utterances.append(
-      Utterance(text: text, channel: currentChannel, confidence: avgConfidence, at: Date())
+      Utterance(
+        text: text, channel: currentChannel,
+        distance: currentDistance, confidence: avgConfidence, at: Date())
     )
     partialText = ""
   }
@@ -250,19 +280,28 @@ final class SpeechStream {
     return Double(previous[hyp.count]) / Double(ref.count)
   }
 
-  /// Best (lowest) WER achieved on this channel — the operator's cleanest read.
-  func bestWER(for channel: Channel) -> Double? {
+  /// Best (lowest) WER for a channel, optionally restricted to one distance bucket.
+  func bestWER(for channel: Channel, at distance: Distance? = nil) -> Double? {
     let rates = utterances
-      .filter { $0.channel == channel }
+      .filter { $0.channel == channel && (distance == nil || $0.distance == distance!) }
       .map { Self.wordErrorRate(hypothesis: $0.text) }
     return rates.min()
   }
 
+  func count(for channel: Channel, at distance: Distance) -> Int {
+    utterances.filter { $0.channel == channel && $0.distance == distance }.count
+  }
+
+  /// Distance buckets that actually have data, for rendering the envelope table.
+  var testedDistances: [Distance] {
+    Distance.allCases.filter { d in utterances.contains { $0.distance == d } }
+  }
+
   /// Did the recogniser get the NAME right? Ultimately the only thing that matters —
   /// a transcript can be messy and still bind the identity correctly.
-  func capturedName(for channel: Channel) -> Bool {
+  func capturedName(for channel: Channel, at distance: Distance? = nil) -> Bool {
     utterances
-      .filter { $0.channel == channel }
+      .filter { $0.channel == channel && (distance == nil || $0.distance == distance!) }
       .contains { $0.text.lowercased().contains("priya") }
   }
 }
