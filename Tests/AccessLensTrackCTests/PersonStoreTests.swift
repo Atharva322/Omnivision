@@ -163,6 +163,43 @@ final class PersonStoreTests: XCTestCase {
         XCTAssertTrue(siblings.contains { $0.lastPathComponent.contains("corrupt-") })
         XCTAssertEqual(try Data(contentsOf: url), Data("{not-json".utf8))
     }
+
+    func testEncounterHistoryPersistsAndIsDeletedWithPerson() async throws {
+        let url = temporaryStoreURL()
+        let store = try PersonStore(url: url)
+        let person = try await store.bind(name: "Priya")
+        _ = try await store.updateLatestSummary("First conversation", for: person.id)
+        _ = try await store.registerEncounter(
+            for: person.id,
+            at: Date(timeIntervalSince1970: 200),
+            summary: "Second conversation"
+        )
+
+        let beforeReload = await store.encounters(for: person.id)
+        XCTAssertEqual(beforeReload.map(\.summary), ["First conversation", "Second conversation"])
+
+        let reloaded = try PersonStore(url: url)
+        let reloadedCount = await reloaded.encounters(for: person.id).count
+        XCTAssertEqual(reloadedCount, 2)
+        _ = try await reloaded.delete(id: person.id)
+        let afterDeletion = await reloaded.encounters(for: person.id)
+        XCTAssertTrue(afterDeletion.isEmpty)
+    }
+
+    func testUnnamedClusterPersistsAndIsRemovedWhenBound() async throws {
+        let url = temporaryStoreURL()
+        let cluster = UUID()
+        let store = try PersonStore(url: url)
+        _ = try await store.recordUnnamedCluster(cluster, at: Date(timeIntervalSince1970: 10))
+
+        let reloaded = try PersonStore(url: url)
+        let persistedClusters = await reloaded.unnamedClusters().map(\.clusterID)
+        XCTAssertEqual(persistedClusters, [cluster])
+
+        _ = try await reloaded.bind(name: "Priya", clusterID: cluster)
+        let afterBinding = await reloaded.unnamedClusters()
+        XCTAssertTrue(afterBinding.isEmpty)
+    }
 }
 
 private struct LegacyPeople: Encodable {

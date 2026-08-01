@@ -111,6 +111,37 @@ public struct RejectedIdentityAssociation: Codable, Hashable, Sendable {
     }
 }
 
+public struct UnnamedClusterRecord: Codable, Identifiable, Equatable, Sendable {
+    public var id: UUID { clusterID }
+    public let clusterID: UUID
+    public let firstSeenAt: Date
+    public var lastSeenAt: Date
+
+    public init(clusterID: UUID, firstSeenAt: Date = Date(), lastSeenAt: Date = Date()) {
+        self.clusterID = clusterID
+        self.firstSeenAt = firstSeenAt
+        self.lastSeenAt = lastSeenAt
+    }
+}
+
+/// Portable outputs from Track A orchestration. Track D maps these to approved spoken strings and
+/// earcons; the coordinator never owns final accessibility wording.
+public enum SocialMemoryAction: Equatable, Sendable {
+    case captureStarted
+    case capturePaused
+    case known(Person)
+    case likely(Person)
+    case clarificationRequired([String])
+    case unknown(clusterID: UUID?)
+    case correctionAccepted
+    case reminderSaved(Person)
+    case favoriteSaved(Person)
+    case forgetConfirmationRequired(Person)
+    case personForgotten(personID: UUID)
+    case noCurrentPerson
+    case noAction
+}
+
 public enum Channel: String, Codable, Sendable {
     case wearer
     case other

@@ -11,7 +11,7 @@ The current branch packages the hardware-independent Track A and Track C impleme
 
 ```text
 Sources/AccessLensTrackC/
-├── Core/          shared models, protocols, EventLog, SessionMachine
+├── Core/          models, protocols, EventLog, SessionMachine, social-memory coordinator
 ├── Identity/      extraction, evidence, resolver, PersonStore, FaceCluster
 ├── Audio/         wake-word command grammar
 ├── Evaluation/    fixture runner

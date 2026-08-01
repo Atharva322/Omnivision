@@ -4,14 +4,17 @@ public enum PersonStoreError: Error, Equatable {
     case personNotFound(UUID)
     case invalidName
     case invalidPendingNote
+    case invalidSummary
     case unsupportedSchemaVersion(Int)
 }
 
 public actor PersonStore {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
     public let url: URL
     private var peopleByID: [UUID: Person]
     private var rejectedAssociations: Set<RejectedIdentityAssociation>
+    private var encountersByID: [UUID: Encounter]
+    private var unnamedClustersByID: [UUID: UnnamedClusterRecord]
 
     public init(url: URL? = nil) throws {
         let resolvedURL = url ?? Self.defaultURL()
@@ -19,6 +22,10 @@ public actor PersonStore {
         let persisted = try Self.load(from: resolvedURL)
         self.peopleByID = Dictionary(uniqueKeysWithValues: persisted.people.map { ($0.id, $0) })
         self.rejectedAssociations = Set(persisted.rejectedAssociations)
+        self.encountersByID = Dictionary(uniqueKeysWithValues: persisted.encounters.map { ($0.id, $0) })
+        self.unnamedClustersByID = Dictionary(
+            uniqueKeysWithValues: persisted.unnamedClusters.map { ($0.clusterID, $0) }
+        )
     }
 
     public func allPersons() -> [Person] {
@@ -56,6 +63,26 @@ public actor PersonStore {
         rejectedAssociations.sorted { $0.rejectedAt < $1.rejectedAt }
     }
 
+    public func encounters(for personID: UUID) -> [Encounter] {
+        encountersByID.values
+            .filter { $0.personID == personID }
+            .sorted { $0.at < $1.at }
+    }
+
+    public func unnamedClusters() -> [UnnamedClusterRecord] {
+        unnamedClustersByID.values.sorted { $0.firstSeenAt < $1.firstSeenAt }
+    }
+
+    @discardableResult
+    public func recordUnnamedCluster(_ clusterID: UUID, at: Date = Date()) throws -> UnnamedClusterRecord {
+        var record = unnamedClustersByID[clusterID]
+            ?? UnnamedClusterRecord(clusterID: clusterID, firstSeenAt: at, lastSeenAt: at)
+        record.lastSeenAt = at
+        unnamedClustersByID[clusterID] = record
+        try save()
+        return record
+    }
+
     @discardableResult
     public func upsert(_ person: Person) throws -> Person {
         var updated = person
@@ -89,6 +116,9 @@ public actor PersonStore {
             if let clusterID, !existing.clusterIDs.contains(clusterID) {
                 existing.clusterIDs.append(clusterID)
             }
+            if let clusterID {
+                unnamedClustersByID.removeValue(forKey: clusterID)
+            }
             existing.lastEncounterAt = at
             if existing.encounterCount == 0 {
                 existing.encounterCount = 1
@@ -106,6 +136,15 @@ public actor PersonStore {
         )
         applyDerivedTier(to: &person)
         peopleByID[person.id] = person
+        if let clusterID {
+            unnamedClustersByID.removeValue(forKey: clusterID)
+        }
+        let encounter = Encounter(
+            personID: person.id,
+            at: at,
+            clusterID: clusterID
+        )
+        encountersByID[encounter.id] = encounter
         try save()
         return person
     }
@@ -132,6 +171,37 @@ public actor PersonStore {
 
         applyDerivedTier(to: &person)
         peopleByID[person.id] = person
+        let encounter = Encounter(
+            personID: person.id,
+            at: at,
+            summary: person.lastSummary,
+            clusterID: clusterID
+        )
+        encountersByID[encounter.id] = encounter
+        if let clusterID {
+            unnamedClustersByID.removeValue(forKey: clusterID)
+        }
+        try save()
+        return person
+    }
+
+    @discardableResult
+    public func updateLatestSummary(_ summary: String, for personID: UUID) throws -> Person {
+        guard let normalizedSummary = Self.normalizedDisplayText(summary) else {
+            throw PersonStoreError.invalidSummary
+        }
+        guard var person = peopleByID[personID] else {
+            throw PersonStoreError.personNotFound(personID)
+        }
+        person.lastSummary = normalizedSummary
+        peopleByID[personID] = person
+        if let latestID = encountersByID.values
+            .filter({ $0.personID == personID })
+            .max(by: { $0.at < $1.at })?.id,
+           var encounter = encountersByID[latestID] {
+            encounter.summary = normalizedSummary
+            encountersByID[latestID] = encounter
+        }
         try save()
         return person
     }
@@ -192,6 +262,9 @@ public actor PersonStore {
             throw PersonStoreError.personNotFound(id)
         }
         rejectedAssociations = Set(rejectedAssociations.filter { $0.personID != id })
+        encountersByID = Dictionary(uniqueKeysWithValues: encountersByID.filter {
+            $0.value.personID != id
+        })
         try save()
         return removed
     }
@@ -209,7 +282,9 @@ public actor PersonStore {
         let payload = PersistedPeople(
             schemaVersion: Self.currentSchemaVersion,
             people: allPersons(),
-            rejectedAssociations: rejectedIdentityAssociations()
+            rejectedAssociations: rejectedIdentityAssociations(),
+            encounters: encountersByID.values.sorted { $0.at < $1.at },
+            unnamedClusters: unnamedClusters()
         )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
@@ -223,7 +298,9 @@ public actor PersonStore {
             return PersistedPeople(
                 schemaVersion: currentSchemaVersion,
                 people: [],
-                rejectedAssociations: []
+                rejectedAssociations: [],
+                encounters: [],
+                unnamedClusters: []
             )
         }
 
@@ -232,7 +309,9 @@ public actor PersonStore {
             return PersistedPeople(
                 schemaVersion: currentSchemaVersion,
                 people: [],
-                rejectedAssociations: []
+                rejectedAssociations: [],
+                encounters: [],
+                unnamedClusters: []
             )
         }
 
@@ -294,21 +373,29 @@ private struct PersistedPeople: Codable {
     let schemaVersion: Int
     let people: [Person]
     let rejectedAssociations: [RejectedIdentityAssociation]
+    let encounters: [Encounter]
+    let unnamedClusters: [UnnamedClusterRecord]
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion
         case people
         case rejectedAssociations
+        case encounters
+        case unnamedClusters
     }
 
     init(
         schemaVersion: Int,
         people: [Person],
-        rejectedAssociations: [RejectedIdentityAssociation]
+        rejectedAssociations: [RejectedIdentityAssociation],
+        encounters: [Encounter],
+        unnamedClusters: [UnnamedClusterRecord]
     ) {
         self.schemaVersion = schemaVersion
         self.people = people
         self.rejectedAssociations = rejectedAssociations
+        self.encounters = encounters
+        self.unnamedClusters = unnamedClusters
     }
 
     init(from decoder: Decoder) throws {
@@ -319,6 +406,11 @@ private struct PersistedPeople: Codable {
         rejectedAssociations = try container.decodeIfPresent(
             [RejectedIdentityAssociation].self,
             forKey: .rejectedAssociations
+        ) ?? []
+        encounters = try container.decodeIfPresent([Encounter].self, forKey: .encounters) ?? []
+        unnamedClusters = try container.decodeIfPresent(
+            [UnnamedClusterRecord].self,
+            forKey: .unnamedClusters
         ) ?? []
     }
 }

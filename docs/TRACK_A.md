@@ -18,6 +18,10 @@ core/identity work and Track C extraction work. Do not create a second Core or I
 | Face clustering | `Sources/AccessLensTrackC/Identity/FaceCluster.swift` | Apple implementation behind conditional compilation |
 | Name/cluster correction memory | `PersonStore` + `IdentityResolver` | Implemented and persisted |
 | Store schema migration | `PersonStore` | Versioned; legacy version 0 migrates on write |
+| End-to-end portable orchestration | `Sources/AccessLensTrackC/Core/SocialMemoryCoordinator.swift` | Implemented |
+| Durable unnamed clusters | `PersonStore` schema v2 | Implemented |
+| Encounter history | `PersonStore` schema v2 | Implemented |
+| Destructive artifact-deletion seam | `IdentityArtifactDeleting` | Implemented; Apple owner still required |
 | Unit tests | `Tests/AccessLensTrackCTests/` | Written; run on Swift/macOS or Swift/Docker |
 
 ## Invariants implemented
@@ -82,11 +86,9 @@ Apple-side implementation plan:
 
 Until that work is completed, describe face continuity as session-local.
 
-## Remaining Track A work
+## Portable coordinator
 
-### Application coordinator
-
-The components exist independently, but the iOS application still needs one coordinator owning:
+`SocialMemoryCoordinator` now owns:
 
 - current `SessionState`;
 - transcript and candidates for the current conversation;
@@ -94,7 +96,7 @@ The components exist independently, but the iOS application still needs one coor
 - the last reported identity for correction;
 - deferred persistence and narration.
 
-Required flow:
+Implemented flow:
 
 ```text
 CommandParser → SessionMachine → NameExtractor → EvidenceAssessor
@@ -104,9 +106,7 @@ CommandParser → SessionMachine → NameExtractor → EvidenceAssessor
                                   FaceCluster ↔ PersonStore → Narrator
 ```
 
-### Resolver/store integration
-
-`IdentityResolver` is a value built from snapshots. After any store mutation, rebuild it using:
+It rebuilds the value-type resolver from current snapshots:
 
 ```swift
 let resolver = IdentityResolver(
@@ -116,6 +116,20 @@ let resolver = IdentityResolver(
 ```
 
 The coordinator—not the resolver—owns writes. This keeps resolution deterministic and testable.
+Track B should feed only finalized `Utterance` values into `ingest`; Track D maps returned
+`SocialMemoryAction` values to approved narration and earcons.
+
+## Remaining Track A work
+
+### iOS adapters
+
+The portable behavior is implemented. The iOS app still must provide:
+
+1. Final utterances and camera cluster IDs to `SocialMemoryCoordinator`.
+2. An `IdentityArtifactDeleting` implementation that safely deletes feature prints, consented crops,
+   and pronunciation audio.
+3. Track D mappings for every `SocialMemoryAction`.
+4. A versioned Apple-side `FacePrintRepository` for cross-launch matching.
 
 ### Face threshold calibration
 
@@ -130,6 +144,11 @@ The coordinator—not the resolver—owns writes. This keeps resolution determin
 
 Confirm that anonymous on-device face clustering is allowed under Meta's DAT policy. If it is not,
 remove `FaceCluster`; spoken-name binding remains functional.
+
+### Optional E5 topic hints
+
+Topical similarity remains unimplemented. It is optional for the hackathon and must be hedge-only;
+it may never create or assert a name.
 
 ## Exact Mac verification
 
