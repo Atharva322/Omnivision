@@ -60,7 +60,10 @@ public struct NameExtractionPolicy {
     public var neutralOtherChannelASRConfidence: Float
 
     public init(
-        strongThreshold: Float = 0.55,
+        // 0.50 so the unverified-name bucket in `PortableNameValidator` still passes a strong
+        // template. Lowering it admits nothing new — the validator only emits 0.92 / 0.80 / 0.50 —
+        // it just stops that bucket from being scored high enough to assert. See the comment there.
+        strongThreshold: Float = 0.50,
         mediumThreshold: Float = 0.70,
         weakThreshold: Float = 0.80,
         multiTokenThreshold: Float = 0.80,

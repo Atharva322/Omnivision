@@ -148,6 +148,63 @@ EvidenceAssessor.assess(extractor.candidates(in: Utterance(text: "Hey Marcus", c
 
 ---
 
+## Robustness across speakers, rates and accents
+
+`Fixtures/asr_robustness.json` (54 cases) measures what happens when different people say the same
+sentence. **It is not a voice test.** No audio, microphone or recogniser is involved. What varies
+between two speakers — rate, accent, hesitation, vocal effort — reaches this code only as *text
+damage*, and text damage is what the corpus applies:
+
+| Condition | Text signature | Behaviour |
+|---|---|---|
+| Fast speech | function words elided — "nice **meet** you priya" | binds |
+| Fast speech | words merged — "nicetomeetyou priya" | safe miss |
+| Hesitation | fillers — "nice to meet you **um** priya" | binds |
+| Hesitation | stutters — "nice to **to** meet you" | binds |
+| False start | "**P-** Priya" | binds the completed form |
+| Narrowband 8 kHz | frame corrupted — "**night** to meet you" | safe miss |
+| Narrowband 8 kHz | name respelt — "preeya" | binds as transcribed |
+| Truncation | "nice to meet you **prem**" | **hedges, never asserts** |
+| Crosstalk | "sorry nice to meet you priya so what do you do" | binds |
+
+Three repairs live in `SpeechTokenizer` rather than in any one template, because they are properties
+of how people speak and every matcher wants them: fillers are dropped, false-start stubs (`P-`) are
+dropped, and immediately-repeated tokens collapse. `repairDisfluencies: false` shows the raw stream.
+
+The corpus found five real defects, all now fixed and pinned by `ASRRobustnessTests`:
+
+1. **Truncated names were asserted.** `"nice to meet you prem"` scored 0.470 against a 0.45 threshold
+   and stated "Prem" as fact. This is the one that mattered — see below.
+2. Fillers blocked extraction entirely (0 % recall on that condition, and commands too).
+3. A dropped `to` at speed broke the primary E1 frame.
+4. A repeated name became a two-token name: `"priya priya"` → `"Priya Priya"`.
+5. A false-start stub blocked the name behind it.
+
+### Why truncation forces unfamiliar names to hedge
+
+A clipped name and an unfamiliar one are **textually identical**. `"prem"` (Premila, cut) and
+`"adaobi"` (complete) are both "a plausible token the lexicon does not know". No amount of string
+analysis separates them, so the choice is which error to prefer.
+
+The G1 calibration raised `neutralASRConfidence` to 0.90 for the wearer channel — correct on its own
+terms, since G1 measured 0 % WER there. But `Utterance` still carries no `isFinal` flag, so partial
+hypotheses arrive looking exactly like finals, and that raise pushed truncations over the assert
+line. The two changes were individually sound and jointly unsafe.
+
+The unfamiliar-name bucket now scores 0.50 instead of 0.55, landing at `0.95 × 0.50 × 0.90 = 0.4275`
+— just below the 0.45 assert threshold. Such names are still extracted and still offered; they are
+offered as *"Was that Adaobi?"* rather than stated. Names in the lexicon, and names capitalised
+mid-sentence, still assert outright. Raising that constant above ~0.526 re-arms the bug;
+`ASRRobustnessTests.testTruncatedNamesAreNeverAsserted` fails if anyone does.
+
+This does mean a name outside the 514-entry lexicon costs one confirmation. That asymmetry is real
+and it falls hardest on names the list under-represents. It is still the right trade: a confirmation
+is one sentence, and a wrong name is stored, spoken aloud as fact, and invisible to a wearer who
+cannot see the screen. `"Lumen, this is <name>"` remains the E0 path that binds anything,
+unconditionally.
+
+---
+
 ## Why precision over recall
 
 The plan states it in one line — "a missed name costs one extra spoken sentence; a wrong name
