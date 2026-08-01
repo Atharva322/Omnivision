@@ -96,9 +96,3 @@ public struct IdentityResolver: IdentityResolving {
         return names
     }
 }
-
-private extension String {
-    var accessLensIdentityKey: String {
-        trimmingCharacters(in: .whitespacesAndNewlines).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-    }
-}

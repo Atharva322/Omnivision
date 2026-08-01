@@ -224,9 +224,3 @@ public actor PersonStore {
 private struct PersistedPeople: Codable {
     let people: [Person]
 }
-
-private extension String {
-    var accessLensIdentityKey: String {
-        trimmingCharacters(in: .whitespacesAndNewlines).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-    }
-}

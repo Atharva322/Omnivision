@@ -207,9 +207,7 @@ public actor EventLog {
         var names: [String] = []
 
         for candidate in candidates {
-            let key = candidate.name
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            let key = candidate.name.accessLensIdentityKey
             if seen.insert(key).inserted {
                 names.append(candidate.name)
             }
