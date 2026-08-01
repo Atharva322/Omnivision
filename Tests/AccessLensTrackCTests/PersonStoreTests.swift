@@ -167,16 +167,25 @@ final class PersonStoreTests: XCTestCase {
     func testEncounterHistoryPersistsAndIsDeletedWithPerson() async throws {
         let url = temporaryStoreURL()
         let store = try PersonStore(url: url)
-        let person = try await store.bind(name: "Priya")
+        // Both encounters need EXPLICIT, ordered timestamps. Previously `bind` was left to default
+        // to Date() (now) for the first encounter while the second was pinned to epoch+200 (1970),
+        // so ascending order correctly returned them reversed and the assertion contradicted its
+        // own setup. `encounters(for:)` sorting chronologically is the intended behaviour, so the
+        // test moved rather than the store.
+        let firstAt = Date(timeIntervalSince1970: 100)
+        let secondAt = Date(timeIntervalSince1970: 200)
+
+        let person = try await store.bind(name: "Priya", at: firstAt)
         _ = try await store.updateLatestSummary("First conversation", for: person.id)
         _ = try await store.registerEncounter(
             for: person.id,
-            at: Date(timeIntervalSince1970: 200),
+            at: secondAt,
             summary: "Second conversation"
         )
 
         let beforeReload = await store.encounters(for: person.id)
         XCTAssertEqual(beforeReload.map(\.summary), ["First conversation", "Second conversation"])
+        XCTAssertEqual(beforeReload.map(\.at), [firstAt, secondAt], "history is chronological")
 
         let reloaded = try PersonStore(url: url)
         let reloadedCount = await reloaded.encounters(for: person.id).count
