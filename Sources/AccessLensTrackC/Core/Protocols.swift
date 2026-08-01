@@ -36,7 +36,7 @@ public protocol NameExtracting {
 }
 
 public protocol FaceClustering {
-    func clusterId(for image: CGImage) throws -> UUID?
+    func clusterId(for image: CGImage) async throws -> UUID?
 }
 
 public protocol IdentityResolving {

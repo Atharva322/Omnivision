@@ -5,19 +5,24 @@ final class SessionMachineTests: XCTestCase {
 
     func testHappyPathTransitionsBackToIdle() async throws {
         let machine = SessionMachine()
-        XCTAssertEqual(await machine.currentState(), .idle)
+        let state1 = await machine.currentState()
+        XCTAssertEqual(state1, .idle)
 
         try await machine.startCapture()
-        XCTAssertEqual(await machine.currentState(), .capturing)
+        let state2 = await machine.currentState()
+        XCTAssertEqual(state2, .capturing)
 
         try await machine.finishCapture()
-        XCTAssertEqual(await machine.currentState(), .binding)
+        let state3 = await machine.currentState()
+        XCTAssertEqual(state3, .binding)
 
         try await machine.completeBinding()
-        XCTAssertEqual(await machine.currentState(), .reporting)
+        let state4 = await machine.currentState()
+        XCTAssertEqual(state4, .reporting)
 
         try await machine.finishReporting()
-        XCTAssertEqual(await machine.currentState(), .idle)
+        let state5 = await machine.currentState()
+        XCTAssertEqual(state5, .idle)
     }
 
     func testInvalidTransitionThrows() async {
@@ -37,7 +42,8 @@ final class SessionMachineTests: XCTestCase {
         let machine = SessionMachine()
         try await machine.startCapture()
         try await machine.pause()
-        XCTAssertEqual(await machine.currentState(), .idle)
+        let state6 = await machine.currentState()
+        XCTAssertEqual(state6, .idle)
     }
 
     func testCorrectionReturnsReportingToBinding() async throws {
