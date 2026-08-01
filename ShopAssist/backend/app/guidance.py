@@ -74,14 +74,26 @@ def build_guidance(session: dict, current_section: str) -> str:
     if chosen.get("held_close"):
         label = f"{chosen.get('brand', '')} {chosen.get('variant', '')}".strip()
         if not preference:
-            # Nothing was ever saved for this category — state identity, don't imply a "usual" exists.
-            return f"This is {label}."
+            # Nothing was ever saved for this category — name it, don't imply a "usual" exists.
+            return f"This looks like {label}."
         if preferred_matches:
-            return f"Yes, this is your {label}."
-        return f"This isn't your usual pick — it's {label}. Your usual one should be nearby."
+            # "Looks like", not "Yes, this is". Without the barcode step this is a vision-model
+            # judgement, and the wording has to match the strength of the evidence — the same
+            # assert-vs-hedge rule the social track follows.
+            #
+            # And say WHICH part matched. A brand-only preference matches every variant, so
+            # calling Oatly Chocolate "your usual" when only "Oatly" was ever saved overstates
+            # what is known.
+            if not (preference.get("variant") or "") and (chosen.get("variant") or ""):
+                brand = chosen.get("brand", "")
+                return f"This looks like {label}. That matches your usual {brand}, though I don't have a variant saved."
+            return f"This looks like your {label}."
+        return f"This doesn't look like your usual pick — it looks like {label}. Your usual one should be nearby."
 
     label = f"{chosen.get('brand', '')} {chosen.get('variant', '')}".strip()
     position_text = describe_position(chosen)
     if preferred_matches:
         return f"Your usual {label} is {position_text}."
+    # Position guidance is help finding something, not a claim about what it is, so "found" is
+    # fine here — the identity claim only happens in held_close mode above.
     return f"Found {label} {position_text}."

@@ -138,7 +138,7 @@ def test_locate_wandering_then_arrival_then_confirmation(client, monkeypatch):
         },
     )
     resp = client.post("/locate", data={"session_id": "s1"}, files=fake_image())
-    assert resp.json()["guidance_text"] == "Yes, this is your Oatly Original."
+    assert resp.json()["guidance_text"] == "This looks like your Oatly Original."
 
 
 def test_ask_uses_last_located_products_as_context(client, monkeypatch):

@@ -1,0 +1,173 @@
+{
+  "": {
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/primary.swiftdeps"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Audio/Command.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Command.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Command.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Command~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Command.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Command.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Audio/LumenCommandParser.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/LumenCommandParser.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/LumenCommandParser.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/LumenCommandParser~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/LumenCommandParser.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/LumenCommandParser.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Core/EventLog.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EventLog.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EventLog.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EventLog~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EventLog.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EventLog.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Core/Models.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Models.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Models.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Models~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Models.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Models.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Core/Protocols.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Protocols.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Protocols.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Protocols~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Protocols.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Protocols.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Core/SessionMachine.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SessionMachine.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SessionMachine.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SessionMachine~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SessionMachine.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SessionMachine.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Evaluation/Fixture.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Fixture.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Fixture.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Fixture~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Fixture.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Fixture.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Evaluation/FixtureEvaluator.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FixtureEvaluator.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FixtureEvaluator.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FixtureEvaluator~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FixtureEvaluator.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FixtureEvaluator.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/EvidenceAssessment.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceAssessment.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceAssessment.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceAssessment~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceAssessment.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceAssessment.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/EvidenceLevel.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceLevel.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceLevel.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceLevel~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceLevel.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/EvidenceLevel.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/FaceCluster.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FaceCluster.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FaceCluster.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FaceCluster~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FaceCluster.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/FaceCluster.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/IdentityKey.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityKey.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityKey.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityKey~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityKey.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityKey.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/IdentityResolver.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityResolver.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityResolver.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityResolver~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityResolver.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/IdentityResolver.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/Lexicons.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Lexicons.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Lexicons.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Lexicons~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Lexicons.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/Lexicons.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/NameDenylist.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameDenylist.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameDenylist.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameDenylist~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameDenylist.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameDenylist.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/NameExtractor.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameExtractor.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameExtractor.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameExtractor~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameExtractor.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameExtractor.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/NameSlotResolver.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameSlotResolver.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameSlotResolver.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameSlotResolver~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameSlotResolver.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameSlotResolver.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/NameTemplate.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameTemplate.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameTemplate.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameTemplate~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameTemplate.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameTemplate.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/PersonStore.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonStore.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonStore.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonStore.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonStore.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Identity/PersonalNameValidating.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonalNameValidating.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonalNameValidating.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonalNameValidating~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonalNameValidating.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/PersonalNameValidating.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Text/NameFormatter.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameFormatter.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameFormatter.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameFormatter~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameFormatter.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/NameFormatter.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/Text/SpeechTokenizer.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SpeechTokenizer.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SpeechTokenizer.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SpeechTokenizer~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SpeechTokenizer.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/SpeechTokenizer.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/Sources/AccessLensTrackC/_TrackAContracts_TEMPORARY.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/_TrackAContracts_TEMPORARY.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/_TrackAContracts_TEMPORARY.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/_TrackAContracts_TEMPORARY~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/_TrackAContracts_TEMPORARY.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/_TrackAContracts_TEMPORARY.dia"
+  },
+  "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/DerivedSources/resource_bundle_accessor.swift": {
+    "dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/resource_bundle_accessor.d",
+    "object": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/resource_bundle_accessor.swift.o",
+    "swiftmodule": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/resource_bundle_accessor~partial.swiftmodule",
+    "swift-dependencies": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/resource_bundle_accessor.swiftdeps",
+    "diagnostics": "/Users/myangupta/Downloads/Omnivision/.build/arm64-apple-macosx/debug/AccessLensTrackC.build/resource_bundle_accessor.dia"
+  }
+}

@@ -116,7 +116,7 @@ def test_held_close_matching_preference_confirms():
         last_products=[make_product(held_close=True)],
     )
     text = build_guidance(session, "dairy")
-    assert text == "Yes, this is your Oatly Original."
+    assert text == "This looks like your Oatly Original."
 
 
 def test_held_close_not_matching_preference_flags_the_mismatch():
@@ -126,11 +126,29 @@ def test_held_close_not_matching_preference_flags_the_mismatch():
         last_products=[make_product(brand="Silk", variant="Unsweetened", held_close=True)],
     )
     text = build_guidance(session, "dairy")
-    assert text == "This isn't your usual pick — it's Silk Unsweetened. Your usual one should be nearby."
+    assert text == "This doesn't look like your usual pick — it looks like Silk Unsweetened. Your usual one should be nearby."
 
 
 def test_held_close_with_no_saved_preference_states_identity_only():
     # No preference was ever recorded for this category — must not claim a "usual" exists.
     session = make_session(target="milk", last_products=[make_product(held_close=True)])
     text = build_guidance(session, "dairy")
-    assert text == "This is Oatly Original."
+    assert text == "This looks like Oatly Original."
+
+
+def test_brand_only_preference_does_not_claim_the_variant_is_your_usual():
+    """A preference saved from one photo often has no variant, and brand-only matching then
+    matches every variant. The match may stand, but the wording must not call an unverified
+    variant "your usual" — that is a confident wrong confirmation to a blind wearer.
+    """
+    session = {
+        "target": "milk",
+        "last_products": [
+            {"brand": "Oatly", "variant": "Chocolate", "category": "milk", "held_close": True}
+        ],
+        "preferences": {"milk": {"brand": "Oatly"}},
+    }
+    text = build_guidance(session, "dairy")
+    assert "your usual Oatly" in text
+    assert "your Oatly Chocolate" not in text
+    assert "don't have a variant saved" in text
