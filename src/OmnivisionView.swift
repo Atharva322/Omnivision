@@ -23,6 +23,7 @@
 #if os(iOS)
 
 import CoreGraphics
+import OSLog
 import SwiftUI
 import UIKit
 import AccessLensTrackC
@@ -77,8 +78,14 @@ final class OmnivisionSession {
     /// name path — which is the only path allowed to assert anyway.
     private var faces: FaceCluster?
     private var presence = FacePresence()
+    /// What the face pipeline is ACTUALLY doing, not what was successfully constructed.
+    ///
+    /// This said "faces on" as soon as the Core ML model loaded, which is a different claim from
+    /// "frames are arriving and being embedded". The camera was delivering nothing and the status
+    /// bar reported success — the exact silent-success failure this project keeps rediscovering.
     private(set) var faceStatus = "off"
     private(set) var facesSeen = 0
+    private(set) var framesSeen = 0
 
     /// One Core ML inference per interval. At the camera's frame rate the phone would cook for no
     /// benefit — a face does not change between adjacent frames, and this is frequent enough to
@@ -88,6 +95,7 @@ final class OmnivisionSession {
     private var audioTask: Task<Void, Never>?
     private var utteranceTask: Task<Void, Never>?
     private var faceTask: Task<Void, Never>?
+    private var faceWatchdog: Task<Void, Never>?
     private var cancelFrames: (() -> Void)?
 
     var context: ProactiveContext {
@@ -100,14 +108,17 @@ final class OmnivisionSession {
     // MARK: - Lifecycle
 
     /// - Parameters:
-    ///   - startCamera: brings the DAT camera stream up. Injected rather than referenced directly
-    ///     so this file never imports the SDK and stays usable with MockDeviceKit.
+    ///   - startCamera: brings the DAT camera stream up, returning an error message on failure and
+    ///     nil on success. Injected rather than referenced directly so this file never imports the
+    ///     SDK and stays usable with MockDeviceKit. It reports its error HERE rather than only into
+    ///     the host app, because the host app's alert sits underneath this screen where the wearer
+    ///     will never see or hear it.
     ///   - listenForFrames: subscribes to that stream. Same reasoning.
     ///
     /// Both are optional: with neither supplied the session runs name-only, which is exactly how it
     /// behaved before faces existed.
     func start(
-        startCamera: (() async -> Void)? = nil,
+        startCamera: (() async -> String?)? = nil,
         listenForFrames: ((@escaping (UIImage) -> Void) -> Any)? = nil
     ) async {
         guard !isRunning else { return }
@@ -143,8 +154,12 @@ final class OmnivisionSession {
         // The camera comes up only after HFP is established. Meta documents this ordering, and
         // reversing it costs the audio the entire system depends on.
         if let listenForFrames {
-            await startCamera?()
-            startFaces(listenForFrames: listenForFrames)
+            if let cameraError = await startCamera?() ?? nil {
+                faceStatus = "camera failed"
+                log("face", "camera did not start: \(cameraError)", spoken: nil)
+            } else {
+                startFaces(listenForFrames: listenForFrames)
+            }
         }
 
         narrator.play(.captureOn)
@@ -158,7 +173,7 @@ final class OmnivisionSession {
             faces = try FaceCluster(
                 embedder: try VisionMobileFaceEmbedder(),
                 matcher: .provisional)
-            faceStatus = "faces on"
+            faceStatus = "awaiting frames"
         } catch {
             faces = nil
             faceStatus = "faces unavailable"
@@ -172,11 +187,23 @@ final class OmnivisionSession {
             guard let self else { return }
             await self.consumeFaces(frames)
         }
+
+        // Loading a model is not the same as receiving frames, and the difference is invisible
+        // to a blind wearer. If nothing arrives, say so instead of showing a green light.
+        faceWatchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self, !Task.isCancelled, self.framesSeen == 0 else { return }
+            self.faceStatus = "no camera frames"
+            self.log(
+                "face",
+                "the camera delivered no frames in 8 seconds — face recognition is not running",
+                spoken: nil)
+        }
     }
 
     func stop() {
-        audioTask?.cancel(); utteranceTask?.cancel(); faceTask?.cancel()
-        audioTask = nil; utteranceTask = nil; faceTask = nil
+        audioTask?.cancel(); utteranceTask?.cancel(); faceTask?.cancel(); faceWatchdog?.cancel()
+        audioTask = nil; utteranceTask = nil; faceTask = nil; faceWatchdog = nil
         cancelFrames?(); cancelFrames = nil
         speech.stop(); spine.stop()
         presence.clear()
@@ -191,6 +218,8 @@ final class OmnivisionSession {
     private func consumeFaces(_ frames: AsyncStream<CapturedFrame>) async {
         var lastEmbedAt = Date.distantPast
         for await frame in frames {
+            framesSeen += 1
+            if faceStatus != "faces on" { faceStatus = "faces on" }
             let now = Date()
             guard now.timeIntervalSince(lastEmbedAt) >= Self.faceInterval else { continue }
             lastEmbedAt = now
@@ -427,9 +456,23 @@ final class OmnivisionSession {
         }
     }
 
+    /// Mirrors every event to the unified log as well as the on-screen transcript.
+    ///
+    /// The transcript is the right channel for the demo — it is what judges read and what a sighted
+    /// helper can check. It is the wrong channel for debugging a session that already ended, which
+    /// is why a failure that produced a clear on-screen explanation still left nothing in the
+    /// device log to go back to. Both now, always.
+    ///
+    ///     sudo log collect --device-udid <udid> --last 15m --output phone.logarchive
+    ///     log show phone.logarchive --predicate 'subsystem == "com.omnivision.social"'
+    private static let logger = Logger(subsystem: "com.omnivision.social", category: "session")
+
     private func log(_ kind: String, _ detail: String, spoken: String?) {
         events.append(Event(at: Date(), kind: kind, detail: detail, spoken: spoken))
         if events.count > 80 { events.removeFirst(events.count - 80) }
+        // Public: this is a demo build and the whole point is being able to read back what the
+        // system decided. No wearer audio or embeddings pass through here — only decisions.
+        Self.logger.log("\(kind, privacy: .public) | \(detail, privacy: .public) | spoken=\(spoken ?? "-", privacy: .public)")
     }
 }
 
@@ -440,7 +483,7 @@ struct OmnivisionView: View {
     /// Brings the glasses camera up, and subscribes to it. Injected so this file never imports the
     /// DAT SDK — the same pattern `FrameBridge` uses, and what keeps MockDeviceKit workable.
     /// Left nil, the session runs name-only with no face recognition.
-    var startCamera: (() async -> Void)?
+    var startCamera: (() async -> String?)?
     var listenForFrames: ((@escaping (UIImage) -> Void) -> Any)?
 
     var body: some View {

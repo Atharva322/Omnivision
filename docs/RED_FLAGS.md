@@ -217,6 +217,46 @@ rather than a wrong name. Do not carry this number into anything real without re
 
 ---
 
+### 22. Turning faces on destroyed the screen that turned them on
+
+`StreamSessionView` shows `NonStreamView` **or** `StreamView`, switching on `isStreaming`. The
+Omnivision sheet was presented from `NonStreamView`. Starting the camera flips `isStreaming`, which
+removes `NonStreamView` from the hierarchy — and a sheet dies with the view that presented it.
+
+So the feature tore down its own host the instant it began to work. On device this surfaced as
+"Lumen, who is this" answering *"I don't know who this is"*: no frames, no cluster, `.nothing`.
+
+Fixed by moving the sheet up to `StreamSessionView`, which survives the swap.
+
+**This is the third bug in this repo where the compiler was perfectly happy and the failure was
+structural.** SwiftUI view lifetime is invisible in the type system, exactly like `.last` on a
+sorted array (#17) and a no-op default closure (#18).
+
+### 23. The status bar reported success for a pipeline receiving nothing
+
+`faceStatus` was set to `"faces on"` when the Core ML model finished loading. Loading a model and
+receiving frames are different claims, and the code asserted the second on evidence of the first.
+A green light said the face path was working while it had never seen a single frame.
+
+Now: `awaiting frames` → `faces on` only once a frame actually arrives, an 8-second watchdog that
+reports `no camera frames` if none does, a `camera failed` state carrying the SDK's own error into
+the transcript, and a live `Nf/Mfaces` counter.
+
+The host app *did* have an error alert — sitting underneath the sheet, where neither a wearer nor a
+blind user would ever find it.
+
+### 24. Events never reached the system log
+
+Every decision went to the in-app transcript and nowhere else, so a session that had already ended
+left nothing to diagnose from. Events now mirror to `os_log` under `com.omnivision.social`:
+
+    sudo log collect --device-udid <udid> --last 15m --output phone.logarchive
+    log show phone.logarchive --predicate 'subsystem == "com.omnivision.social"'
+
+Note `log collect` needs root, and `log` is shadowed by a shell alias here — use `/usr/bin/log`.
+
+---
+
 ## LOW — cleanup, but permanent if ignored
 
 ### 14. 15 MB of JPEGs are in git
