@@ -37,7 +37,8 @@ final class EventLogTests: XCTestCase {
 
         try await log.logResolution(.known(person), cluster: UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
 
-        let entry = try XCTUnwrap(await log.snapshot().first)
+        let snapshot1 = await log.snapshot()
+        let entry = try XCTUnwrap(snapshot1.first)
         XCTAssertEqual(entry.category, "identity.resolution")
         XCTAssertEqual(entry.metadata["state"], "known")
         XCTAssertEqual(entry.metadata["name"], "Priya")
@@ -55,7 +56,8 @@ final class EventLogTests: XCTestCase {
             metadata: ["note": "hello\nworld"]
         )
 
-        let entry = try XCTUnwrap(await log.snapshot().first)
+        let snapshot2 = await log.snapshot()
+        let entry = try XCTUnwrap(snapshot2.first)
         XCTAssertEqual(entry.message, "line one line two")
         XCTAssertEqual(entry.metadata["note"], "hello world")
     }

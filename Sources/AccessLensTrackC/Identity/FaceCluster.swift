@@ -69,7 +69,16 @@ public actor FaceCluster: FaceClustering {
             return nil
         }
 
-        let rect = VNImageRectForNormalizedRect(face.boundingBox, image.width, image.height)
+        // Vision reports boundingBox with a BOTTOM-LEFT origin; CGImage.cropping(to:) expects
+        // TOP-LEFT. Without this flip a face in the upper frame is cropped from the lower frame,
+        // producing feature prints of the wrong region — clustering silently on garbage.
+        let visionRect = VNImageRectForNormalizedRect(face.boundingBox, image.width, image.height)
+        let rect = CGRect(
+            x: visionRect.origin.x,
+            y: CGFloat(image.height) - visionRect.origin.y - visionRect.height,
+            width: visionRect.width,
+            height: visionRect.height
+        )
         guard let crop = image.cropping(to: rect) else {
             return nil
         }
