@@ -5,14 +5,16 @@ public enum PersonStoreError: Error, Equatable {
     case invalidName
     case invalidPendingNote
     case invalidSummary
+    case associationRejected(personID: UUID, clusterID: UUID)
     case unsupportedSchemaVersion(Int)
 }
 
 public actor PersonStore {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
     public let url: URL
     private var peopleByID: [UUID: Person]
     private var rejectedAssociations: Set<RejectedIdentityAssociation>
+    private var confirmedAssociations: Set<ConfirmedIdentityAssociation>
     private var encountersByID: [UUID: Encounter]
     private var unnamedClustersByID: [UUID: UnnamedClusterRecord]
 
@@ -22,6 +24,7 @@ public actor PersonStore {
         let persisted = try Self.load(from: resolvedURL)
         self.peopleByID = Dictionary(uniqueKeysWithValues: persisted.people.map { ($0.id, $0) })
         self.rejectedAssociations = Set(persisted.rejectedAssociations)
+        self.confirmedAssociations = Set(persisted.confirmedAssociations)
         self.encountersByID = Dictionary(uniqueKeysWithValues: persisted.encounters.map { ($0.id, $0) })
         self.unnamedClustersByID = Dictionary(
             uniqueKeysWithValues: persisted.unnamedClusters.map { ($0.clusterID, $0) }
@@ -61,6 +64,16 @@ public actor PersonStore {
 
     public func rejectedIdentityAssociations() -> [RejectedIdentityAssociation] {
         rejectedAssociations.sorted { $0.rejectedAt < $1.rejectedAt }
+    }
+
+    public func confirmedIdentityAssociations() -> [ConfirmedIdentityAssociation] {
+        confirmedAssociations.sorted { $0.confirmedAt < $1.confirmedAt }
+    }
+
+    public func isConfirmed(personID: UUID, clusterID: UUID) -> Bool {
+        confirmedAssociations.contains {
+            $0.personID == personID && $0.clusterID == clusterID
+        } && !isRejected(personID: personID, clusterID: clusterID)
     }
 
     public func encounters(for personID: UUID) -> [Encounter] {
@@ -244,6 +257,9 @@ public actor PersonStore {
         }
         person.clusterIDs.removeAll { $0 == clusterID }
         peopleByID[personID] = person
+        confirmedAssociations = Set(confirmedAssociations.filter {
+            $0.personID != personID || $0.clusterID != clusterID
+        })
         rejectedAssociations = Set(rejectedAssociations.filter {
             $0.personID != personID || $0.clusterID != clusterID
         })
@@ -254,14 +270,43 @@ public actor PersonStore {
         return person
     }
 
+    /// Records explicit wearer confirmation. A prior rejection is never silently overwritten.
+    @discardableResult
+    public func confirmIdentityAssociation(
+        personID: UUID,
+        clusterID: UUID,
+        at: Date = Date()
+    ) throws -> Person {
+        guard var person = peopleByID[personID] else {
+            throw PersonStoreError.personNotFound(personID)
+        }
+        guard !isRejected(personID: personID, clusterID: clusterID) else {
+            throw PersonStoreError.associationRejected(personID: personID, clusterID: clusterID)
+        }
+        if !person.clusterIDs.contains(clusterID) {
+            person.clusterIDs.append(clusterID)
+            peopleByID[personID] = person
+        }
+        confirmedAssociations = Set(confirmedAssociations.filter {
+            $0.personID != personID || $0.clusterID != clusterID
+        })
+        confirmedAssociations.insert(
+            ConfirmedIdentityAssociation(personID: personID, clusterID: clusterID, confirmedAt: at)
+        )
+        unnamedClustersByID.removeValue(forKey: clusterID)
+        try save()
+        return person
+    }
+
     /// Deletes the persisted person and returns the removed record so the iOS coordinator can
-    /// delete its pronunciation clip and face-print artifacts too.
+    /// delete its pronunciation clip and face-embedding artifacts too.
     @discardableResult
     public func delete(id: UUID) throws -> Person {
         guard let removed = peopleByID.removeValue(forKey: id) else {
             throw PersonStoreError.personNotFound(id)
         }
         rejectedAssociations = Set(rejectedAssociations.filter { $0.personID != id })
+        confirmedAssociations = Set(confirmedAssociations.filter { $0.personID != id })
         encountersByID = Dictionary(uniqueKeysWithValues: encountersByID.filter {
             $0.value.personID != id
         })
@@ -283,6 +328,7 @@ public actor PersonStore {
             schemaVersion: Self.currentSchemaVersion,
             people: allPersons(),
             rejectedAssociations: rejectedIdentityAssociations(),
+            confirmedAssociations: confirmedIdentityAssociations(),
             encounters: encountersByID.values.sorted { $0.at < $1.at },
             unnamedClusters: unnamedClusters()
         )
@@ -299,6 +345,7 @@ public actor PersonStore {
                 schemaVersion: currentSchemaVersion,
                 people: [],
                 rejectedAssociations: [],
+                confirmedAssociations: [],
                 encounters: [],
                 unnamedClusters: []
             )
@@ -310,6 +357,7 @@ public actor PersonStore {
                 schemaVersion: currentSchemaVersion,
                 people: [],
                 rejectedAssociations: [],
+                confirmedAssociations: [],
                 encounters: [],
                 unnamedClusters: []
             )
@@ -373,6 +421,7 @@ private struct PersistedPeople: Codable {
     let schemaVersion: Int
     let people: [Person]
     let rejectedAssociations: [RejectedIdentityAssociation]
+    let confirmedAssociations: [ConfirmedIdentityAssociation]
     let encounters: [Encounter]
     let unnamedClusters: [UnnamedClusterRecord]
 
@@ -380,6 +429,7 @@ private struct PersistedPeople: Codable {
         case schemaVersion
         case people
         case rejectedAssociations
+        case confirmedAssociations
         case encounters
         case unnamedClusters
     }
@@ -388,12 +438,14 @@ private struct PersistedPeople: Codable {
         schemaVersion: Int,
         people: [Person],
         rejectedAssociations: [RejectedIdentityAssociation],
+        confirmedAssociations: [ConfirmedIdentityAssociation],
         encounters: [Encounter],
         unnamedClusters: [UnnamedClusterRecord]
     ) {
         self.schemaVersion = schemaVersion
         self.people = people
         self.rejectedAssociations = rejectedAssociations
+        self.confirmedAssociations = confirmedAssociations
         self.encounters = encounters
         self.unnamedClusters = unnamedClusters
     }
@@ -406,6 +458,10 @@ private struct PersistedPeople: Codable {
         rejectedAssociations = try container.decodeIfPresent(
             [RejectedIdentityAssociation].self,
             forKey: .rejectedAssociations
+        ) ?? []
+        confirmedAssociations = try container.decodeIfPresent(
+            [ConfirmedIdentityAssociation].self,
+            forKey: .confirmedAssociations
         ) ?? []
         encounters = try container.decodeIfPresent([Encounter].self, forKey: .encounters) ?? []
         unnamedClusters = try container.decodeIfPresent(

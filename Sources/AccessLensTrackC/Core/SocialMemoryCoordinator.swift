@@ -9,7 +9,7 @@ public enum SocialMemoryCoordinatorError: Error, Equatable {
     case artifactDeletionUnavailable
 }
 
-/// Apple/iOS integration implements this to delete feature prints, consented face crops, and the
+/// Apple/iOS integration implements this to delete embeddings, consented face crops, and the
 /// optional pronunciation clip before the person record is removed.
 public protocol IdentityArtifactDeleting: Sendable {
     func deleteArtifacts(for person: Person) async throws
@@ -177,6 +177,26 @@ public actor SocialMemoryCoordinator {
         self.lastReported = nil
         currentPersonID = nil
         return .correctionAccepted
+    }
+
+    /// Promotes the last face-only hedge after explicit wearer confirmation.
+    public func confirmLastIdentity() async throws -> SocialMemoryAction {
+        guard case .likely(let person)? = lastReported, let cluster = currentCluster else {
+            throw SocialMemoryCoordinatorError.noReportedIdentity
+        }
+        let confirmed = try await store.confirmIdentityAssociation(
+            personID: person.id,
+            clusterID: cluster
+        )
+        let state = IdentityState.known(confirmed)
+        lastReported = state
+        currentPersonID = confirmed.id
+        try await eventLog.append(
+            category: "identity.confirmation",
+            message: "wearer confirmed face and person association",
+            metadata: ["personID": person.id.uuidString, "cluster": cluster.uuidString]
+        )
+        return .known(confirmed)
     }
 
     public func confirmForget() async throws -> SocialMemoryAction {
@@ -347,6 +367,7 @@ public actor SocialMemoryCoordinator {
         IdentityResolver(
             people: await store.snapshot(),
             rejectedAssociations: await store.rejectedIdentityAssociations(),
+            confirmedAssociations: await store.confirmedIdentityAssociations(),
             policy: evidencePolicy
         )
     }
