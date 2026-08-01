@@ -231,12 +231,16 @@ struct AudioProbeView: View {
     .clipShape(RoundedRectangle(cornerRadius: 16))
   }
 
-  /// Best WER across the buckets that represent an actual conversation (0.6m / 1.0m).
+  /// WORST WER across the realistic buckets, not the best.
+  ///
+  /// A channel that works at 1.0m but fails at 0.6m is not dependable — people do not stand on a
+  /// mark. Taking the best score hid exactly that: OTHER read 9% at 1.0m and 36% at 0.6m, and
+  /// reporting 9% made a fragile channel look solid.
   private func realisticWER(_ channel: Channel) -> Double? {
-    Distance.allCases
+    let rates = Distance.allCases
       .filter(\.isRealistic)
       .compactMap { speech.bestWER(for: channel, at: $0) }
-      .min()
+    return rates.isEmpty ? nil : rates.max()
   }
 
   /// Four possible worlds, and they imply different designs.

@@ -327,6 +327,31 @@ one MCP query at Hour 0, but do not build on it unconfirmed.
 | **E4** | Face cluster match | camera | ❌ hedge only |
 | **E5** | Topical similarity | transcript | ❌ hedge only |
 
+### G1 MEASURED — 2026-07-31, quiet room, 16 kHz HFP, one trial per cell
+
+Word error rate against the fixed script *"Nice to meet you Priya I work on latency at Stripe"*.
+✓ = the name survived, which is the only thing identity binding actually needs.
+
+| Channel | 0.3m | 0.6m | **1.0m** | 2.0m |
+|---|---|---|---|---|
+| **WEARER** | 0% ✓ | 0% ✓ | **0% ✓** | 0% ✓ |
+| **OTHER** | 55% ✗ | 36% ✗ | **9% ✓** | 64% ✗ |
+
+**Verdict: E1 (wearer echo) is the primary path. E2 (self-introduction) is opportunistic.**
+
+The wearer channel is flat 0% at every distance — the wearer's mouth is a fixed distance from the
+array regardless of where anyone else stands. This is the reliability the whole design wanted, and
+it is confirmed rather than assumed.
+
+The other speaker is **non-monotonic**: worst at 0.3m, best at 1.0m, collapsing at 2.0m. That is the
+forward-facing beam pattern — at 0.3m the speaker is beside the wearer's face and off-axis; at 1.0m
+they are in front and on-axis. So E2 lands only when someone is at conversational distance **and
+facing the wearer**, which is common but not dependable. Treat every E2 capture as a bonus.
+
+> **Caveat:** one trial per cell, one voice, quiet room. The demo room will also be quiet (the team
+> can ask for silence), so these numbers are representative of demo conditions rather than
+> optimistic. They are **not** representative of an open hackathon floor.
+
 ### Wearer-echo templates (`NameExtractor`)
 
 ```
