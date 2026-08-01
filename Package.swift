@@ -14,12 +14,17 @@ let package = Package(
         .macOS(.v12)
     ],
     products: [
-        .library(name: "AccessLensTrackC", targets: ["AccessLensTrackC"])
+        .library(name: "AccessLensTrackC", targets: ["AccessLensTrackC"]),
+        .executable(name: "trackc-eval", targets: ["trackc-eval"])
     ],
     targets: [
         .target(
             name: "AccessLensTrackC",
             resources: [.process("Resources")]
+        ),
+        .executableTarget(
+            name: "trackc-eval",
+            dependencies: ["AccessLensTrackC"]
         ),
         .testTarget(
             name: "AccessLensTrackCTests",
