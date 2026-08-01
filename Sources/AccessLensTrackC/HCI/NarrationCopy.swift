@@ -275,25 +275,95 @@ public enum ConsentDecision: Equatable, Sendable {
 }
 
 /// Precision-first parser for the spoken consent gate. Ambiguous or mixed answers never grant.
+///
+/// Token-based rather than exact-phrase so that natural speech variety — hesitation fillers
+/// ("um yes"), repetition ("yes yes"), casual affirmatives ("yeah", "of course"), and idioms
+/// ("I don't mind") — is understood without weakening the safety property. The invariant is
+/// unchanged from the first version: any utterance containing BOTH positive and negative signals
+/// is `.unclear` and re-asks; a grant requires an unambiguous yes-signal and nothing against it.
+///
+/// Deliberately excluded: "uh-huh" (yes) and "uh-uh" (no) are one ASR slip apart at this audio
+/// route, so both fall through to `.unclear`. "sounds good" is likewise excluded — commentary,
+/// not consent. Matching is exact-token, never substring: "yesterday" does not contain a yes.
 public struct ConsentDecisionParser: Sendable {
+    private static let leadingFillers: Set<String> = [
+        "um", "uh", "er", "erm", "ah", "oh", "hmm", "hm", "mm", "well", "so"
+    ]
+    private static let negativeTokens: Set<String> = [
+        "no", "nope", "nah", "not", "dont", "never", "stop", "decline", "cant", "wont"
+    ]
+    private static let positiveTokens: Set<String> = [
+        "yes", "yeah", "yep", "yup", "sure", "okay", "ok", "alright", "agree",
+        "consent", "absolutely", "definitely", "certainly", "fine", "course"
+    ]
+    /// Adjacent word pairs consumed as one positive signal.
+    private static let positivePairs: [[String]] = [
+        ["go", "ahead"], ["please", "do"], ["you", "can"], ["all", "right"],
+        ["sure", "thing"],
+        // Idiomatic yes — a literal token scan would read "don't" as a decline.
+        ["dont", "mind"], ["not", "mind"]
+    ]
+    /// Adjacent word pairs consumed as one negative signal. A negator directly before a
+    /// consent verb negates it ("don't consent"), and intensified refusals stay refusals
+    /// ("absolutely not").
+    private static let negativePairs: [[String]] = [
+        ["absolutely", "not"], ["definitely", "not"], ["certainly", "not"],
+        ["rather", "not"],
+        ["dont", "consent"], ["not", "consent"], ["dont", "agree"], ["not", "agree"]
+    ]
+
     public init() {}
 
     public func parse(_ text: String) -> ConsentDecision {
-        let words = normalizedWords(text)
-        let phrase = words.joined(separator: " ")
+        var words = normalizedWords(text)
 
-        let negativePhrases = [
-            "no", "no thanks", "do not", "dont", "stop", "decline", "i do not consent",
-            "i dont consent"
-        ]
-        if negativePhrases.contains(where: { phrase == $0 || phrase.hasPrefix("\($0) ") }) {
-            return .declined
+        // Hesitation is cadence, not content: "um yes" is a yes.
+        while let first = words.first, Self.leadingFillers.contains(first) {
+            words.removeFirst()
         }
 
-        let positivePhrases = ["yes", "yes please", "i agree", "i consent", "okay", "ok", "sure"]
-        if positivePhrases.contains(phrase) {
-            return .granted
+        // Repetition is emphasis or a recognizer artifact: "yes yes" is a yes, "no no no" a no.
+        var deduped: [String] = []
+        for word in words where deduped.last != word {
+            deduped.append(word)
         }
+        words = deduped
+
+        guard !words.isEmpty else { return .unclear }
+
+        var hasPositive = false
+        var hasNegative = false
+        var remaining: [String] = []
+        var index = 0
+        while index < words.count {
+            if index + 1 < words.count {
+                let pair = [words[index], words[index + 1]]
+                if Self.positivePairs.contains(pair) {
+                    hasPositive = true
+                    index += 2
+                    continue
+                }
+                if Self.negativePairs.contains(pair) {
+                    hasNegative = true
+                    index += 2
+                    continue
+                }
+            }
+            remaining.append(words[index])
+            index += 1
+        }
+
+        for word in remaining {
+            if Self.negativeTokens.contains(word) {
+                hasNegative = true
+            } else if Self.positiveTokens.contains(word) {
+                hasPositive = true
+            }
+        }
+
+        // Mixed signals never grant and never silently decline — the system asks again.
+        if hasNegative && !hasPositive { return .declined }
+        if hasPositive && !hasNegative { return .granted }
         return .unclear
     }
 
