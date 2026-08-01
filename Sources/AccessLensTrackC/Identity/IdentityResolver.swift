@@ -4,11 +4,13 @@ public struct IdentityResolver: IdentityResolving {
     private let peopleByName: [String: Person]
     private let peopleByCluster: [UUID: Person]
     private let rejectedPairs: Set<RejectedPair>
+    private let confirmedPairs: Set<IdentityPair>
     private let policy: EvidencePolicy
 
     public init(
         people: [Person] = [],
         rejectedAssociations: [RejectedIdentityAssociation] = [],
+        confirmedAssociations: [ConfirmedIdentityAssociation] = [],
         policy: EvidencePolicy = .default
     ) {
         self.peopleByName = Dictionary(
@@ -24,6 +26,9 @@ public struct IdentityResolver: IdentityResolving {
         self.peopleByCluster = clusterMap
         self.rejectedPairs = Set(rejectedAssociations.map {
             RejectedPair(personID: $0.personID, clusterID: $0.clusterID)
+        })
+        self.confirmedPairs = Set(confirmedAssociations.map {
+            IdentityPair(personID: $0.personID, clusterID: $0.clusterID)
         })
         self.policy = policy
     }
@@ -56,9 +61,15 @@ public struct IdentityResolver: IdentityResolving {
         guard let cluster else {
             return .nothing
         }
-        if let known = peopleByCluster[cluster],
-           !rejectedPairs.contains(RejectedPair(personID: known.id, clusterID: cluster)) {
-            return .likely(attach(cluster: cluster, to: known))
+        if let known = peopleByCluster[cluster] {
+            let pair = IdentityPair(personID: known.id, clusterID: cluster)
+            guard !rejectedPairs.contains(
+                RejectedPair(personID: known.id, clusterID: cluster)
+            ) else {
+                return .unnamedCluster(cluster)
+            }
+            let attached = attach(cluster: cluster, to: known)
+            return confirmedPairs.contains(pair) ? .known(attached) : .likely(attached)
         }
         return .unnamedCluster(cluster)
     }
@@ -107,6 +118,11 @@ public struct IdentityResolver: IdentityResolving {
 }
 
 private struct RejectedPair: Hashable {
+    let personID: UUID
+    let clusterID: UUID
+}
+
+private struct IdentityPair: Hashable {
     let personID: UUID
     let clusterID: UUID
 }

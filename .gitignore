@@ -21,5 +21,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# Restricted face-model artifacts — download/convert locally; never redistribute from this repo
+.model-cache/
+Sources/AccessLensTrackC/Resources/Models/*.mlpackage
+Sources/AccessLensTrackC/Resources/Models/*.mlmodel
+Sources/AccessLensTrackC/Resources/Models/*.mlmodelc
+Sources/AccessLensTrackC/Resources/Models/*.onnx
+
 # macOS
 .DS_Store

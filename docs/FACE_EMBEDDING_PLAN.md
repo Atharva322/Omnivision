@@ -15,6 +15,57 @@ evidence ladder, and every caller stay unchanged.
 **Tech Stack:** Swift 5.9 · Vision (`VNDetectFaceLandmarksRequest`) · Core ML · Accelerate (vDSP) ·
 coremltools 8.x (Python, conversion only)
 
+For the exact Mac execution order, remaining implementation tasks, expected outputs, iPhone handoff,
+and definition of done, follow `docs/FACE_EMBEDDING_MACOS_COMPLETION_PLAN.md`.
+
+## Implementation status — foundation branch
+
+Started on `feature/face-embedding-foundation`. Implemented: five-point similarity-transform math,
+Vision landmark coordinate conversion, cosine matching, fail-closed uncalibrated policy, versioned
+embedding persistence with five-sample diversity retention and deletion, embedding-backed
+`FaceCluster` orchestration, and persisted human confirmation with rejection precedence. Portable
+tests are written but cannot be executed in the current Windows/non-Swift environment.
+
+The model choice is now pinned to InsightFace v0.7 `buffalo_sc` for this non-commercial hackathon;
+its licence record, official download URL, and SHA-256 are in `docs/MODEL_LICENSE.md`. The repository
+contains a verified downloader, Core ML conversion/parity script, aligned renderer, and
+`VisionMobileFaceEmbedder`. Restricted ONNX/Core ML weights remain local and Git-ignored.
+
+Still gated: Meta policy approval, running the Core ML conversion on macOS, glasses calibration
+data/threshold, Apple build, and on-device validation. The default
+embedder returns no result and the uncalibrated matcher cannot match, so incomplete integration
+cannot silently identify someone.
+
+### Local model setup on macOS
+
+```bash
+./Tools/models/fetch_buffalo_sc.sh
+python3 -m venv .model-cache/coreml-venv
+source .model-cache/coreml-venv/bin/activate
+python -m pip install -r Tools/models/requirements-coreml.txt
+python Tools/models/convert_buffalo_sc.py
+```
+
+The conversion refuses a modified download, compares ONNX and Core ML outputs at cosine similarity
+`>= 0.999`, uses float16 weights, and rejects a generated package larger than 10 MiB. Neither the
+source weights nor `MobileFaceNet.mlpackage` may be committed or redistributed.
+
+### Calibration command
+
+After capturing the consented glasses dataset using anonymous person folders:
+
+```bash
+python3 -m venv .model-cache/calibration-venv
+source .model-cache/calibration-venv/bin/activate
+python -m pip install -r Tools/calibrate/requirements.txt
+python Tools/calibrate/calibrate.py /absolute/path/to/CalibrationFaces
+```
+
+The command requires at least 10 people and 5 valid one-face images per person. It writes only an
+anonymous aggregate report to `.model-cache/calibration-report.json`; images and embeddings are not
+copied into the repository. It selects the first representable cosine value above the largest
+observed impostor score and reports the resulting genuine-pair acceptance rate.
+
 ---
 
 ## Context — read this before writing code
@@ -94,8 +145,9 @@ embedding publicly. Hence Core ML.
 | `Sources/AccessLensTrackC/Face/EmbeddingMatcher.swift` | Cosine similarity, threshold policy, nearest match |
 | `Sources/AccessLensTrackC/Face/FaceEmbeddingStore.swift` | Persisted embeddings per person; supports deletion |
 | `Sources/AccessLensTrackC/Identity/FaceCluster.swift` | **Modified.** Orchestrates the above; protocol unchanged |
-| `Resources/MobileFaceNet.mlpackage` | The model |
-| `Tools/calibrate/main.swift` | Offline calibration harness (Task 5) |
+| `Resources/Models/MobileFaceNet.mlpackage` | Locally generated, Git-ignored model |
+| `Tools/calibrate/calibrate.py` | ONNX/dataset smoke calibration harness |
+| `face-calibrate-apple` follow-up target | Authoritative Vision/Core ML calibration harness |
 
 Keep the pure maths (alignment transform, cosine similarity, threshold policy) in types with **no
 Core ML and no Vision dependency**. That is what makes them testable on Linux and in CI without a
@@ -133,7 +185,7 @@ func testCanonicalLandmarksMapToIdentity() {
 }
 ```
 - [ ] **Step 2: Run it.** Expect: `cannot find 'FaceAligner' in scope`.
-- [ ] **Step 3: Implement.** Use the standard ArcFace 112×112 reference points:
+- [x] **Step 3: Implement.** Use the standard ArcFace 112×112 reference points:
 ```swift
 public static let canonical = FaceLandmarks5(
     leftEye:   CGPoint(x: 38.29, y: 51.69),
@@ -145,7 +197,7 @@ public static let canonical = FaceLandmarks5(
   Solve the least-squares **similarity** transform (rotation + uniform scale + translation only — an
   affine fit will shear the face and cost accuracy). Umeyama's method over the 5 point pairs.
 - [ ] **Step 4: Run — passes.**
-- [ ] **Step 5: More failing tests, one at a time.** A face rotated 30° must align upright; a face at
+- [x] **Step 5: More failing tests, one at a time.** A face rotated 30° must align upright; a face at
       half scale must align to full size; a face offset by 100px must centre.
 - [ ] **Step 6: Commit** — `feat(face): landmark-based alignment`
 
@@ -161,7 +213,7 @@ public static let canonical = FaceLandmarks5(
 
 - [ ] **Step 1: Failing test** — a `VNFaceObservation` with landmarks yields 5 points in image pixels.
 - [ ] **Step 2: Run — fails.**
-- [ ] **Step 3: Implement** using `VNDetectFaceLandmarksRequest`. Take `leftEye` / `rightEye` region
+- [x] **Step 3: Implement** coordinate extraction for `VNDetectFaceLandmarksRequest`. Take `leftEye` / `rightEye` region
       centroids, `nose` centroid, and the outer corners of `outerLips`.
 
       **Two traps:** landmark points are normalised **to the face bounding box**, not the image, so
@@ -177,12 +229,14 @@ public static let canonical = FaceLandmarks5(
 
 ## Task 3 — The embedding model
 
-**Files:** Create `FaceEmbedder.swift`, `FaceEmbedderTests.swift`, add `Resources/MobileFaceNet.mlpackage`
+**Files:** Create `FaceEmbedder.swift`, `AlignedFaceRenderer.swift`, conversion tools, and generate
+`Resources/Models/MobileFaceNet.mlpackage` locally
 
 **Model choice: MobileFaceNet.** ~4 MB, ~10 ms on-device, 512-d output, designed for exactly this.
 FaceNet and full ArcFace are 90 MB+ and offer no benefit at this scale.
 
-- [ ] **Step 1: Convert the model** (Python, one-off):
+- [x] **Step 1: Add a pinned, checksum-verifying conversion workflow.** Run it on macOS before
+      accepting the generated artifact:
 ```python
 import coremltools as ct, torch
 model = torch.jit.load("mobilefacenet.pt").eval()
@@ -201,7 +255,7 @@ mlmodel.save("MobileFaceNet.mlpackage")
 - [ ] **Step 2: Failing test** — the same image embedded twice yields identical vectors; embedding is
       512-d; L2 norm is 1.0.
 - [ ] **Step 3: Run — fails.**
-- [ ] **Step 4: Implement.** Load with `MLModelConfiguration(computeUnits: .all)`. **L2-normalise the
+- [x] **Step 4: Implement.** Load with `MLModelConfiguration(computeUnits: .all)`. **L2-normalise the
       output** — cosine similarity assumes unit vectors, and most exports do not normalise for you.
 - [ ] **Step 5: Run — passes.**
 - [ ] **Step 6: Commit** — `feat(face): MobileFaceNet embedder`
@@ -223,8 +277,8 @@ public struct EmbeddingMatcher: Sendable {
 ```
 
 - [ ] **Step 1: Failing test** — identical vectors give similarity 1.0; orthogonal give 0.0.
-- [ ] **Step 2–4: Implement** with `vDSP_dotpr`, and TDD each case.
-- [ ] **Step 5: Failing test** — a person with several stored embeddings matches on their **best**
+- [x] **Step 2–4: Implement** in portable Swift, and TDD each case. Accelerate optimization remains optional.
+- [x] **Step 5: Failing test** — a person with several stored embeddings matches on their **best**
       one, not their average. People look different across days; averaging blurs exactly the variation
       you need to match against.
 - [ ] **Step 6: Commit** — `feat(face): cosine matcher`
@@ -238,10 +292,14 @@ public struct EmbeddingMatcher: Sendable {
 The previous threshold was wrong by a factor of twenty and nothing caught it. **Never hardcode a
 threshold you have not measured on this hardware.**
 
+The Python harness uses InsightFace detection/alignment and is therefore a smoke test. The final
+threshold must come from the exact Apple pipeline described in
+`FACE_EMBEDDING_MACOS_COMPLETION_PLAN.md`.
+
 - [ ] **Step 1: Capture a calibration set through the glasses** — not a phone. Minimum **10 people ×
       5 photos**: face-on, ±30°, two lighting conditions, one at ~2 m. The existing 9-photo set is a
       smoke test, not a calibration set.
-- [ ] **Step 2: Build the harness.** For all pairs, emit same-person and different-person similarity
+- [x] **Step 2: Build the harness.** For all pairs, emit same-person and different-person similarity
       distributions. The logic can be lifted from the earlier feature-print analysis; only the
       distance function changes.
 - [ ] **Step 3: Pick the threshold from the data.** Choose the operating point where **false accepts
@@ -270,10 +328,11 @@ outcome, and shipping a threshold through an overlap is how the current bug happ
 - [ ] **Step 1: Failing test** — two images of the same person return the same cluster UUID; two
       different people return different UUIDs.
 - [ ] **Step 2: Run — fails.**
-- [ ] **Step 3: Implement.** Replace the feature-print body with: detect → landmarks → align →
+- [ ] **Step 3: Implement.** Embedding orchestration and dependency injection are complete; the
+      licensed Apple detect → landmarks → align → Core ML provider remains gated.
       embed → match. **Keep the protocol, the actor isolation, and every existing test passing.**
 - [ ] **Step 4: Run the full suite.** All 224 existing tests must still pass.
-- [ ] **Step 5: Delete** `VNGenerateImageFeaturePrintRequest` and its threshold. Do not leave it as a
+- [x] **Step 5: Delete** `VNGenerateImageFeaturePrintRequest` and its threshold. Do not leave it as a
       fallback — a silent fallback to a path known not to work is worse than an error.
 - [ ] **Step 6: Commit** — `feat(face): replace feature prints with embeddings`
 
@@ -284,10 +343,10 @@ outcome, and shipping a threshold through an overlap is how the current bug happ
 **Files:** Create `FaceEmbeddingStore.swift`, modify `PersonStore.swift`
 
 - [ ] **Step 1: Failing test** — embeddings survive a store reload.
-- [ ] **Step 2–4:** Implement as `[UUID: [[Float]]]` in the existing flat-JSON store. 512 floats ≈
+- [x] **Step 2–4:** Implement as `[UUID: [[Float]]]` in a versioned flat-JSON store. 512 floats ≈
       2 KB per embedding; cap at **5 per person**, evicting the most similar to an existing one
       (keep the diversity, drop the redundancy).
-- [ ] **Step 5: Failing test** — `delete(person:)` removes every embedding. **This is a legal
+- [x] **Step 5: Failing test** — `deleteEmbeddings(for:)` removes every embedding. **This is a legal
       requirement, not a nicety.** Assert the bytes are gone from the reloaded store.
 - [ ] **Step 6: Commit** — `feat(face): persist and delete embeddings`
 
@@ -306,11 +365,11 @@ Day 12  embedding matches     -> "This might be Priya - Stripe, the 1st"  HEDGE
 Day 20  embedding matches     -> "Priya. Stripe."                        ASSERT
 ```
 
-- [ ] **Step 1: Failing test** — an unconfirmed embedding match yields `.likely`.
-- [ ] **Step 2: Failing test** — after `confirm(person:cluster:)`, the same match yields `.known`.
-- [ ] **Step 3: Implement.** Add `confirmedClusterIDs` alongside the existing `rejectedAssociations`
+- [x] **Step 1: Failing test** — an unconfirmed embedding match yields `.likely`.
+- [x] **Step 2: Failing test** — after `confirmIdentityAssociation(personID:clusterID:)`, the same match yields `.known`.
+- [x] **Step 3: Implement.** Add persisted confirmed associations alongside the existing `rejectedAssociations`
       (which already handles the negative direction).
-- [ ] **Step 4: Failing test** — rejection still wins over confirmation, and is not overwritten.
+- [x] **Step 4: Failing test** — rejection still wins over confirmation, and is not overwritten.
 - [ ] **Step 5: Commit** — `feat(identity): confirmation promotes a face binding to assertable`
 
 > **Why this stays inside the doctrine:** identity is still never *inferred* from a face. It is

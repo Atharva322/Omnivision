@@ -111,6 +111,42 @@ final class PersonStoreTests: XCTestCase {
         XCTAssertTrue(rejectedAfterReload)
     }
 
+    func testConfirmedAssociationPersistsAndRejectionRemovesIt() async throws {
+        let url = temporaryStoreURL()
+        let cluster = UUID()
+        let store = try PersonStore(url: url)
+        let person = try await store.bind(name: "Priya", clusterID: cluster)
+        _ = try await store.confirmIdentityAssociation(personID: person.id, clusterID: cluster)
+
+        let reloaded = try PersonStore(url: url)
+        let confirmed = await reloaded.isConfirmed(personID: person.id, clusterID: cluster)
+        XCTAssertTrue(confirmed)
+
+        _ = try await reloaded.rejectIdentityAssociation(personID: person.id, clusterID: cluster)
+        let confirmedAfterRejection = await reloaded.isConfirmed(
+            personID: person.id,
+            clusterID: cluster
+        )
+        XCTAssertFalse(confirmedAfterRejection)
+    }
+
+    func testConfirmationCannotOverwriteARejection() async throws {
+        let cluster = UUID()
+        let store = try PersonStore(url: temporaryStoreURL())
+        let person = try await store.bind(name: "Priya", clusterID: cluster)
+        _ = try await store.rejectIdentityAssociation(personID: person.id, clusterID: cluster)
+
+        do {
+            _ = try await store.confirmIdentityAssociation(personID: person.id, clusterID: cluster)
+            XCTFail("expected rejected association to remain authoritative")
+        } catch let error as PersonStoreError {
+            XCTAssertEqual(
+                error,
+                .associationRejected(personID: person.id, clusterID: cluster)
+            )
+        }
+    }
+
     func testDeleteReturnsRemovedPersonAndClearsRejectedAssociations() async throws {
         let url = temporaryStoreURL()
         let cluster = UUID()

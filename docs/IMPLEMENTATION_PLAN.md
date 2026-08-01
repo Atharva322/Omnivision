@@ -16,8 +16,8 @@ anonymously for continuity only and never used to infer who someone is.
 
 **Tech Stack:** Swift 5.9 / SwiftUI · Meta Wearables DAT (SPM) · AVFoundation (`AVAudioSession`,
 `AVAudioEngine`, `AVSpeechSynthesizer`) · Speech (`SFSpeechRecognizer`, on-device) · Vision
-(`VNDetectFaceRectanglesRequest`, `VNGenerateImageFeaturePrintRequest`) · NaturalLanguage
-(`NLTagger`) · flat JSON persistence
+(`VNDetectFaceLandmarksRequest`) · Core ML (locally converted InsightFace `buffalo_sc`) ·
+NaturalLanguage (`NLTagger`) · flat JSON persistence
 
 ---
 
@@ -472,22 +472,23 @@ claude mcp list   # expect: wearables ... ✔ Connected
 - [ ] `SessionMachine`: `IDLE → CAPTURING → BINDING → REPORTING → IDLE`, single active state
 - [ ] `PersonStore` — flat JSON in Application Support; load/save/find; **no Core Data, no SwiftData**
 - [ ] Tier computation + `manualTierOverride` guard
-- [ ] `FaceCluster` using Vision:
+- [ ] `FaceCluster` using Vision landmarks plus a real face embedding. The earlier
+      `VNGenerateImageFeaturePrintRequest` experiment was measured and rejected because genuine and
+      impostor distances overlap; see `FACE_EMBEDDING_PLAN.md`:
 ```swift
-let detect = VNDetectFaceRectanglesRequest()
+let detect = VNDetectFaceLandmarksRequest()
 try VNImageRequestHandler(cgImage: image, options: [:]).perform([detect])
 guard let face = detect.results?.first else { return nil }
-// VNFaceObservation.boundingBox is normalized with a bottom-left origin — it must be
-// converted to CGImage pixel coordinates before cropping. Write this helper first;
-// getting it wrong silently crops the wrong region and every cluster becomes garbage.
-let rect = VNImageRectForNormalizedRect(face.boundingBox, image.width, image.height)
-let crop = image.cropping(to: rect)!
-let fp = VNGenerateImageFeaturePrintRequest()
-try VNImageRequestHandler(cgImage: crop, options: [:]).perform([fp])
-let print = fp.results!.first as! VNFeaturePrintObservation
-// match: computeDistance against stored prints, threshold tuned by C at Hour 4
+guard let points = FaceLandmarkExtractor.landmarks(
+    from: face, imageWidth: image.width, imageHeight: image.height
+) else { return nil }
+let aligned = try AlignedFaceRenderer().render(image: image, landmarks: points)
+// VisionMobileFaceEmbedder runs the local 112x112 MobileFaceNet Core ML model,
+// L2-normalizes its 512-d output, then FaceCluster compares cosine similarity.
+// The matcher remains disabled until the glasses calibration reports zero observed false accepts.
 ```
-- [ ] `IdentityResolver` — the ladder, verbatim. Assert only on E0–E3.
+- [ ] `IdentityResolver` — the ladder, verbatim. Assert on E0–E3 or an exact face/person binding
+      previously attested by the wearer; an unattested face match remains hedge-only.
 - [ ] Integration branch ownership; merge every hour; freeze at 8:30
 
 ### Track B — CS · Audio spine + glasses link

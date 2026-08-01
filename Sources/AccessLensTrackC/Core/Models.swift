@@ -111,6 +111,21 @@ public struct RejectedIdentityAssociation: Codable, Hashable, Sendable {
     }
 }
 
+/// A face/person pairing explicitly confirmed by the wearer.
+///
+/// This human attestation can promote a future face-only match from `.likely` to `.known`.
+public struct ConfirmedIdentityAssociation: Codable, Hashable, Sendable {
+    public let personID: UUID
+    public let clusterID: UUID
+    public let confirmedAt: Date
+
+    public init(personID: UUID, clusterID: UUID, confirmedAt: Date = Date()) {
+        self.personID = personID
+        self.clusterID = clusterID
+        self.confirmedAt = confirmedAt
+    }
+}
+
 public struct UnnamedClusterRecord: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID { clusterID }
     public let clusterID: UUID

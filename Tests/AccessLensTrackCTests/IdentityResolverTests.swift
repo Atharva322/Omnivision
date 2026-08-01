@@ -59,6 +59,37 @@ final class IdentityResolverTests: XCTestCase {
         XCTAssertEqual(matched.name, "Priya")
     }
 
+    func testHumanConfirmedFaceMatchAsserts() {
+        let cluster = UUID()
+        let priya = person(name: "Priya", clusterIDs: [cluster])
+        let confirmed = ConfirmedIdentityAssociation(personID: priya.id, clusterID: cluster)
+        let resolver = IdentityResolver(
+            people: [priya],
+            confirmedAssociations: [confirmed]
+        )
+
+        guard case .known(let matched) = resolver.resolve(names: [], cluster: cluster) else {
+            return XCTFail("human-confirmed face binding must assert")
+        }
+        XCTAssertEqual(matched.id, priya.id)
+    }
+
+    func testRejectionWinsOverConfirmation() {
+        let cluster = UUID()
+        let priya = person(name: "Priya", clusterIDs: [cluster])
+        let resolver = IdentityResolver(
+            people: [priya],
+            rejectedAssociations: [
+                RejectedIdentityAssociation(personID: priya.id, clusterID: cluster)
+            ],
+            confirmedAssociations: [
+                ConfirmedIdentityAssociation(personID: priya.id, clusterID: cluster)
+            ]
+        )
+
+        XCTAssertEqual(resolver.resolve(names: [], cluster: cluster), .unnamedCluster(cluster))
+    }
+
     func testConflictingStrongNamesRequireDisambiguation() {
         let resolver = IdentityResolver()
         let state = resolver.resolve(

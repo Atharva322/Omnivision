@@ -1,43 +1,5 @@
 import Foundation
 
-#if canImport(Vision) && canImport(CoreGraphics)
-import Vision
-#endif
-
-public struct FaceClusterPolicy: Sendable {
-    /// Maximum feature-print distance at which two crops are treated as the same person.
-    ///
-    /// MEASURED 2026-08-01 on 9 photos of 3 people taken through the glasses:
-    ///
-    ///     same person       0.53 - 0.85   (mean 0.69)
-    ///     different people  0.61 - 0.96   (mean 0.75)
-    ///
-    /// The distributions OVERLAP: two different people measured 0.61, closer than the same
-    /// person photographed twice at 0.85. `VNGenerateImageFeaturePrintRequest` is general image
-    /// similarity, not a face embedding, and it cannot do face re-identification. Rotating the
-    /// crops upright first was tested and made it worse.
-    ///
-    /// The previous default was 22.0 — more than twenty times the largest distance ever
-    /// observed. Every face would have matched every other face, collapsing all people into one
-    /// person and confidently recalling the wrong name. It went unnoticed because nothing
-    /// called this and it had no tests.
-    ///
-    /// 0.55 is chosen for PRECISION, not recall: below the 0.61 at which two different people
-    /// were ever confused, so it produces no false matches while catching only the closest true
-    /// ones. That trade is right because a face match may only ever HEDGE — a missed match costs
-    /// one question, a false match names the wrong person.
-    ///
-    /// Cross-session recall from a face is therefore NOT reliable. Identity rests on spoken
-    /// names (E0-E3), which the design already assumes.
-    public var distanceThreshold: Float
-
-    public init(distanceThreshold: Float = 0.55) {
-        self.distanceThreshold = distanceThreshold
-    }
-
-    public static let `default` = FaceClusterPolicy()
-}
-
 public actor FaceCluster: FaceClustering {
 
     #if canImport(CoreGraphics)
@@ -76,72 +38,38 @@ public actor FaceCluster: FaceClustering {
     }
     #endif
 
-    private let policy: FaceClusterPolicy
+    private let embedder: any FaceEmbeddingProducing
+    private let matcher: EmbeddingMatcher
+    private let store: FaceEmbeddingStore
 
-    #if canImport(Vision) && canImport(CoreGraphics)
-    private var observations: [UUID: VNFeaturePrintObservation]
-    #endif
-
-    public init(policy: FaceClusterPolicy = .default) {
-        self.policy = policy
-        #if canImport(Vision) && canImport(CoreGraphics)
-        self.observations = [:]
-        #endif
+    /// Creates an embedding-backed clusterer without changing the `FaceClustering` contract.
+    ///
+    /// The defaults deliberately produce no matches: the licensed Core ML model and a threshold
+    /// calibrated on glasses images are required before callers opt into recognition.
+    public init(
+        embedder: any FaceEmbeddingProducing = UnavailableFaceEmbedder(),
+        matcher: EmbeddingMatcher = .uncalibrated,
+        store: FaceEmbeddingStore? = nil
+    ) throws {
+        self.embedder = embedder
+        self.matcher = matcher
+        self.store = try store ?? FaceEmbeddingStore()
     }
 
-    public func clusterId(for image: CGImage) throws -> UUID? {
-        #if canImport(Vision) && canImport(CoreGraphics)
-        guard let observation = try featurePrint(for: image) else {
+    public func clusterId(for image: CGImage) async throws -> UUID? {
+        guard let rawEmbedding = try await embedder.embedding(for: image),
+              let embedding = EmbeddingMatcher.l2Normalized(rawEmbedding) else {
             return nil
         }
 
-        var bestMatch: (id: UUID, distance: Float)?
-        for (id, stored) in observations {
-            var distance: Float = 0
-            try observation.computeDistance(&distance, to: stored)
-            if let current = bestMatch {
-                if distance < current.distance {
-                    bestMatch = (id, distance)
-                }
-            } else {
-                bestMatch = (id, distance)
-            }
-        }
-
-        if let bestMatch, bestMatch.distance <= policy.distanceThreshold {
-            observations[bestMatch.id] = observation
-            return bestMatch.id
+        let stored = await store.snapshot()
+        if let match = matcher.nearest(to: embedding, among: stored) {
+            try await store.add(embedding, to: match.id)
+            return match.id
         }
 
         let newID = UUID()
-        observations[newID] = observation
+        try await store.add(embedding, to: newID)
         return newID
-        #else
-        _ = image
-        return nil
-        #endif
     }
-
-    #if canImport(Vision) && canImport(CoreGraphics)
-    private func featurePrint(for image: CGImage) throws -> VNFeaturePrintObservation? {
-        let detect = VNDetectFaceRectanglesRequest()
-        try VNImageRequestHandler(cgImage: image, options: [:]).perform([detect])
-        guard let face = detect.results?.first else {
-            return nil
-        }
-
-        let rect = Self.imageRect(
-            fromNormalized: face.boundingBox,
-            imageWidth: image.width,
-            imageHeight: image.height
-        )
-        guard let crop = image.cropping(to: rect) else {
-            return nil
-        }
-
-        let request = VNGenerateImageFeaturePrintRequest()
-        try VNImageRequestHandler(cgImage: crop, options: [:]).perform([request])
-        return request.results?.first as? VNFeaturePrintObservation
-    }
-    #endif
 }
