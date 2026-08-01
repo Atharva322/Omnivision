@@ -38,6 +38,22 @@ public enum AnnouncementPriority: Int, Comparable, Sendable {
     public static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
+public extension AnnouncementPriority {
+    /// How speech should behave for an announcement at this urgency.
+    ///
+    /// Two enums exist because they answer different questions: this one is how urgent an
+    /// observation is, `Priority` is what the speech queue does when something is already
+    /// talking. `ambient` maps to `discreet` deliberately — background colour delivered late,
+    /// after whatever interrupted it, is noise, so it should be dropped rather than queued.
+    var speechPriority: Priority {
+        switch self {
+        case .critical: return .critical
+        case .normal:   return .normal
+        case .ambient:  return .discreet
+        }
+    }
+}
+
 public struct Announcement: Equatable, Sendable {
     public let text: String
     public let source: AnnouncementSource

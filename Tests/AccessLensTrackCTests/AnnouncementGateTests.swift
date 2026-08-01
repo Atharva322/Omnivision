@@ -152,3 +152,25 @@ final class AnnouncementGateTests: XCTestCase {
         guard case .speak = decision else { return XCTFail("expected speak, got \(decision)") }
     }
 }
+
+// MARK: - Bridging to the speech contract
+
+final class AnnouncementPriorityBridgeTests: XCTestCase {
+
+    /// Two enums exist because they mean different things: AnnouncementPriority describes how
+    /// urgent a proactive observation is, Priority describes how speech behaves when something is
+    /// already talking. The mapping is where those meet, so it is pinned rather than inferred.
+    func testAmbientBecomesDiscreetSoItIsDroppedRatherThanQueued() {
+        // Ambient is background colour. Delivered late, after whatever interrupted it, it is
+        // noise — so it must map to the priority that gets dropped, not the one that waits.
+        XCTAssertEqual(AnnouncementPriority.ambient.speechPriority, Priority.discreet)
+    }
+
+    func testCriticalStaysCritical() {
+        XCTAssertEqual(AnnouncementPriority.critical.speechPriority, Priority.critical)
+    }
+
+    func testNormalStaysNormal() {
+        XCTAssertEqual(AnnouncementPriority.normal.speechPriority, Priority.normal)
+    }
+}
