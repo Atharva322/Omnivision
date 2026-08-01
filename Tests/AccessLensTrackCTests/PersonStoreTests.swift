@@ -34,6 +34,85 @@ final class PersonStoreTests: XCTestCase {
         XCTAssertEqual(person.tier, .inner)
     }
 
+    /// The round trip the whole face feature rests on: meet someone, hear their name, see their
+    /// face; then quit, relaunch, and see only the face. The second session must know who it is.
+    ///
+    /// This is the failure the wearer actually reported — Priya kept coming back as a new person —
+    /// and it crosses the store boundary, so it cannot be caught by resolver tests alone.
+    func testFaceBoundWithANameIsRecalledByFaceAloneInALaterSession() async throws {
+        let url = temporaryStoreURL()
+        let face = UUID()
+
+        // Session one: the name is spoken while the face is in view.
+        let first = try PersonStore(url: url)
+        let bound = try await first.bind(name: "Priya", org: "Stripe", clusterID: face)
+        XCTAssertEqual(bound.clusterIDs, [face])
+
+        // Session two: a fresh store reading the same file, and no name is spoken.
+        let second = try PersonStore(url: url)
+        let recalled = await second.find(clusterID: face)
+        XCTAssertEqual(recalled?.name, "Priya", "the face must survive a relaunch")
+
+        // And the resolver must HEDGE on it rather than assert — a face is E4 evidence.
+        let people = await second.allPersons()
+        let state = IdentityResolver(people: people).resolve(names: [], cluster: face)
+        guard case .likely(let person) = state else {
+            return XCTFail("face-only recall must hedge, got \(state)")
+        }
+        XCTAssertEqual(person.name, "Priya")
+    }
+
+    /// A second encounter must attach its face to the person already known by name, so someone met
+    /// by name first and seen clearly later becomes recognisable by face.
+    func testEncounterAttachesANewFaceToAnAlreadyNamedPerson() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let person = try await store.bind(name: "Marcus")
+        XCTAssertTrue(person.clusterIDs.isEmpty, "no face was in view when the name was heard")
+
+        let face = UUID()
+        let updated = try await store.registerEncounter(for: person.id, clusterID: face)
+
+        XCTAssertEqual(updated.clusterIDs, [face])
+        let byFace = await store.find(clusterID: face)
+        XCTAssertEqual(byFace?.id, person.id, "the face must now lead back to Marcus")
+    }
+
+    /// `allPersons()` sorts ALPHABETICALLY, so callers reaching for `.last` to mean "the person I
+    /// just met" silently get whoever's name sorts last instead. That mistake reached the demo
+    /// screen, where it powered "who is this", "favourite", and — destructively — "forget them",
+    /// which would have deleted the wrong person on stage.
+    func testMostRecentlyEncounteredIsNotTheAlphabeticallyLastPerson() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+
+        _ = try await store.bind(name: "Zara", at: t0)
+        let aisha = try await store.bind(name: "Aisha", at: t0.addingTimeInterval(60))
+
+        let alphabeticalLast = await store.allPersons().last
+        XCTAssertEqual(alphabeticalLast?.name, "Zara", "alphabetical order, as designed")
+
+        let recent = await store.mostRecentlyEncountered()
+        XCTAssertEqual(recent?.id, aisha.id, "recency must not be confused with alphabetical order")
+    }
+
+    func testANewEncounterMakesAnOlderPersonCurrentAgain() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let t0 = Date(timeIntervalSince1970: 1_000_000)
+
+        let zara = try await store.bind(name: "Zara", at: t0)
+        _ = try await store.bind(name: "Aisha", at: t0.addingTimeInterval(60))
+        _ = try await store.registerEncounter(for: zara.id, at: t0.addingTimeInterval(120))
+
+        let recent = await store.mostRecentlyEncountered()
+        XCTAssertEqual(recent?.name, "Zara", "meeting someone again makes them the current person")
+    }
+
+    func testMostRecentlyEncounteredIsNilOnAnEmptyStore() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let recent = await store.mostRecentlyEncountered()
+        XCTAssertNil(recent)
+    }
+
     func testExistingBindRefreshesContextAndMergesCluster() async throws {
         let store = try PersonStore(url: temporaryStoreURL())
         let firstCluster = UUID()

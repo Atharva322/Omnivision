@@ -151,6 +151,72 @@ while `FaceCluster.swift` imports Vision.
 
 ---
 
+## HIGH — found while wiring faces, 2026-08-01
+
+### 17. "Lumen, forget them" deleted the wrong person
+
+`PersonStore.allPersons()` sorts **alphabetically**. Three commands reached for `.last` on it
+meaning "the person I just met" — `who is this`, `favourite`, and `forget them`. They got whoever's
+name sorted last instead.
+
+For `who is this` that is a wrong answer. For `forget them` it is an unrecoverable deletion of the
+wrong human being, and it would have fired on stage the first time the demo held two people whose
+names were not already in alphabetical order of meeting.
+
+Fixed: `PersonStore.mostRecentlyEncountered()`, plus face-first targeting via `currentPerson()`.
+Pinned by `testMostRecentlyEncounteredIsNotTheAlphabeticallyLastPerson`.
+
+**The lesson is the shape of the bug, not the bug.** `.last` on a sorted collection reads as
+"latest" and compiles either way. There is no type error and no test failure — only a demo that
+deletes your teammate.
+
+### 18. The camera was never connected to anything
+
+`ShopView` and `OmnivisionView` both accepted a `listenForFrames` closure, and its default was
+`{ _ in () }` — a no-op. Every frame-consuming path in the repo was reading from a stream that
+produced nothing, and had been since the frame adapter was written. Tests passed throughout,
+because the tests inject their own frames.
+
+Fixed by routing `StreamSessionViewModel.onVideoFrame` into `OmnivisionView`. Note the constraint
+that forced this shape: one DAT session per device (#3), so the face path cannot open its own
+stream — it has to be handed frames by the view model that already owns the session.
+
+**Still open:** `ShopView.swift` is not in the Xcode target at all, so the shop screen cannot be
+opened on device. `./scripts/sync-app.sh` now reports this.
+
+### 19. The repo and the app were two different copies
+
+`src/*.swift` is **copied** into the host app's Xcode group, not referenced. Editing the repo and
+rebuilding gives you a binary that does not contain your change — the same class of failure as the
+`generic/platform=iOS` build that compiles but never installs.
+
+They happened to be identical when checked, which is luck, not a mechanism. `./scripts/sync-app.sh`
+now syncs, and `--check` fails on drift.
+
+### 20. The face model requires iOS 17; the app targets iOS 15
+
+`coremlc` warns at build time: *"This model is not supported on specified deployment target of ios
+15.0. It requires 17.0 or greater."* It builds and ships anyway, and works on the demo iPhone 16
+Pro Max. On an iOS 15 or 16 device the model load throws.
+
+Handled rather than ignored: `startFaces` catches it, sets `faceStatus = "faces unavailable"`, and
+the session continues name-only. Faces were never allowed to assert, so nothing about the accuracy
+claim depends on the model loading.
+
+### 21. The face threshold rests on five people
+
+Measured through the exact Apple pipeline: genuine 0.3836–1.0000 (n=15), impostor max 0.2874
+(n=90), separable with a 0.096 margin. Threshold set to **0.33**.
+
+That is real separation, and it is five people photographed at one venue on one day — below the ten
+the calibration harness itself demands. The demographic range is narrow and the lighting is uniform.
+Two of the fifteen images scored a perfect 1.0000, meaning they are the same photograph twice.
+
+It is chosen for precision and a face may only ever hedge, so the failure mode is a missed match
+rather than a wrong name. Do not carry this number into anything real without re-measuring.
+
+---
+
 ## LOW — cleanup, but permanent if ignored
 
 ### 14. 15 MB of JPEGs are in git
@@ -196,7 +262,7 @@ Not everything is a risk. These are measured, not assumed:
 - **Name binding end-to-end on hardware** — `"Nice to meet you Priya"` → `ASSERT — Priya`, and
   `"Lumen, this is Priya"` → explicit bind, both observed live.
 - **Package text OCR at confidence 1.00** at both 30 cm and 1 m, with no aiming.
-- **259 tests passing**, including regression tests pinning every bug found this week. Runnable on
+- **343 tests passing**, including regression tests pinning every bug found this week. Runnable on
   Linux too — `scripts/swift-linux.sh test` runs the whole suite in the `swift:6.0` container, so
   validating a change does not require a Mac.
 - **222 fixture examples with zero false assertions and zero safety violations** in the Track C

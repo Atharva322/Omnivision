@@ -5,9 +5,15 @@
 // iOS ONLY.
 //
 //   glasses mic  -> AudioSpine -> SpeechStream -> LumenCommandParser  -> commands
-//                                              -> NameExtractor       -> IdentityResolver
-//   glasses cam  -> FrameBridge -> BarcodeScanner -> ProductCatalog   -> ShopNarration
+//                                              -> NameExtractor       ->\
+//   glasses cam  -> FrameBridge -> FaceCluster -> FacePresence        -> IdentityResolver
+//                              -> BarcodeScanner -> ProductCatalog    -> ShopNarration
 //                                              all -> AnnouncementGate -> Narrator (Track D)
+//
+// A person is identified by name AND face. The name is what may be ASSERTED; the face is what
+// makes the name stick to a human being across sessions. They are not interchangeable: a spoken
+// name binds identity, and the face seen at that moment is attached to it, so a later encounter
+// with no name spoken can still HEDGE ("This might be Priya"). A face alone never asserts.
 //
 // Every decision above happens in a pure, tested type. This file only wires them together and
 // mirrors what happened on screen — because judges cannot hear what is in the wearer's ear, and a
@@ -18,6 +24,7 @@
 
 import CoreGraphics
 import SwiftUI
+import UIKit
 import AccessLensTrackC
 
 @Observable
@@ -65,8 +72,23 @@ final class OmnivisionSession {
     private var gate = AnnouncementGate()
     private var shop: ShopScanner?
 
+    /// Face recognition. Optional on purpose: the Core ML model requires iOS 17 and is a restricted
+    /// artifact that may be absent from a given build, and neither is a reason to lose the spoken
+    /// name path — which is the only path allowed to assert anyway.
+    private var faces: FaceCluster?
+    private var presence = FacePresence()
+    private(set) var faceStatus = "off"
+    private(set) var facesSeen = 0
+
+    /// One Core ML inference per interval. At the camera's frame rate the phone would cook for no
+    /// benefit — a face does not change between adjacent frames, and this is frequent enough to
+    /// keep `FacePresence` refreshed far inside its window.
+    private static let faceInterval: TimeInterval = 1.0
+
     private var audioTask: Task<Void, Never>?
     private var utteranceTask: Task<Void, Never>?
+    private var faceTask: Task<Void, Never>?
+    private var cancelFrames: (() -> Void)?
 
     var context: ProactiveContext {
         ProactiveContext(
@@ -77,7 +99,17 @@ final class OmnivisionSession {
 
     // MARK: - Lifecycle
 
-    func start() async {
+    /// - Parameters:
+    ///   - startCamera: brings the DAT camera stream up. Injected rather than referenced directly
+    ///     so this file never imports the SDK and stays usable with MockDeviceKit.
+    ///   - listenForFrames: subscribes to that stream. Same reasoning.
+    ///
+    /// Both are optional: with neither supplied the session runs name-only, which is exactly how it
+    /// behaved before faces existed.
+    func start(
+        startCamera: (() async -> Void)? = nil,
+        listenForFrames: ((@escaping (UIImage) -> Void) -> Any)? = nil
+    ) async {
         guard !isRunning else { return }
         _ = await AudioSpine.requestMicrophonePermission()
         await speech.requestAuthorization()
@@ -107,15 +139,103 @@ final class OmnivisionSession {
                 await self.handle(utterance)
             }
         }
+
+        // The camera comes up only after HFP is established. Meta documents this ordering, and
+        // reversing it costs the audio the entire system depends on.
+        if let listenForFrames {
+            await startCamera?()
+            startFaces(listenForFrames: listenForFrames)
+        }
+
         narrator.play(.captureOn)
     }
 
+    /// Loads the face model and begins consuming frames. A missing or unloadable model degrades to
+    /// name-only recognition and says so on screen, rather than failing silently or taking the
+    /// session down.
+    private func startFaces(listenForFrames: @escaping (@escaping (UIImage) -> Void) -> Any) {
+        do {
+            faces = try FaceCluster(
+                embedder: try VisionMobileFaceEmbedder(),
+                matcher: .provisional)
+            faceStatus = "faces on"
+        } catch {
+            faces = nil
+            faceStatus = "faces unavailable"
+            log("face", "face recognition unavailable: \(error.localizedDescription)", spoken: nil)
+            return
+        }
+
+        let (frames, cancel) = FrameBridge.stream(listen: listenForFrames)
+        cancelFrames = cancel
+        faceTask = Task { [weak self] in
+            guard let self else { return }
+            await self.consumeFaces(frames)
+        }
+    }
+
     func stop() {
-        audioTask?.cancel(); utteranceTask?.cancel()
-        audioTask = nil; utteranceTask = nil
+        audioTask?.cancel(); utteranceTask?.cancel(); faceTask?.cancel()
+        audioTask = nil; utteranceTask = nil; faceTask = nil
+        cancelFrames?(); cancelFrames = nil
         speech.stop(); spine.stop()
+        presence.clear()
+        faces = nil
+        faceStatus = "off"
         isRunning = false
         route = "stopped"
+    }
+
+    // MARK: - Faces
+
+    private func consumeFaces(_ frames: AsyncStream<CapturedFrame>) async {
+        var lastEmbedAt = Date.distantPast
+        for await frame in frames {
+            let now = Date()
+            guard now.timeIntervalSince(lastEmbedAt) >= Self.faceInterval else { continue }
+            lastEmbedAt = now
+            await observe(frame)
+        }
+    }
+
+    private func observe(_ frame: CapturedFrame) async {
+        guard let faces else { return }
+        do {
+            // Orientation travels with the frame. Feeding a sideways face to the embedder produces
+            // a plausible 512-d vector that does not discriminate — measured, see
+            // FaceOrientationCalibrationTests.
+            guard let cluster = try await faces.clusterId(
+                for: frame.image, orientation: frame.orientation) else { return }
+
+            let now = Date()
+            let changed = presence.live(at: now) != cluster
+            presence.saw(cluster, at: now)
+            guard changed else { return }
+
+            facesSeen += 1
+            if let person = await store.find(clusterID: cluster) {
+                // Seen, not announced. A face is E4 evidence; speaking a name off a face alone is
+                // exactly the false assertion the accuracy claim forbids. The wearer can ask.
+                log("face", "recognised \(person.name)", spoken: nil)
+            } else {
+                log("face", "a face I don't have a name for", spoken: nil)
+            }
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Who the wearer means by "this person": the face in front of them, falling back to the person
+    /// most recently met.
+    ///
+    /// The fallback used to be `allPersons().last`, which is sorted ALPHABETICALLY — so "forget
+    /// them" deleted whoever's name sorted last rather than the person just met.
+    private func currentPerson() async -> Person? {
+        if let cluster = presence.live(at: Date()),
+           let byFace = await store.find(clusterID: cluster) {
+            return byFace
+        }
+        return await store.mostRecentlyEncountered()
     }
 
     // MARK: - Speech
@@ -137,8 +257,11 @@ final class OmnivisionSession {
         }
 
         let known = await store.allPersons()
-        let state = IdentityResolver(people: known).resolve(names: candidates, cluster: nil)
-        await announce(state, heard: utterance.text)
+        // The face in view when the name is spoken is the face that gets attached to it. This is
+        // the entire mechanism by which a person becomes identifiable by name AND face.
+        let cluster = presence.live(at: Date())
+        let state = IdentityResolver(people: known).resolve(names: candidates, cluster: cluster)
+        await announce(state, heard: utterance.text, cluster: cluster)
     }
 
     private func run(_ command: Command, from utterance: Utterance) async {
@@ -157,23 +280,37 @@ final class OmnivisionSession {
             let candidate = NameCandidate(
                 name: name, channel: .wearer, template: "e0.explicit_bind", confidence: 1.0)
             let known = await store.allPersons()
-            let state = IdentityResolver(people: known).resolve(names: [candidate], cluster: nil)
-            await announce(state, heard: utterance.text)
+            let cluster = presence.live(at: Date())
+            let state = IdentityResolver(people: known).resolve(names: [candidate], cluster: cluster)
+            await announce(state, heard: utterance.text, cluster: cluster)
 
         case .whoIsThis:
-            // Explicit request: always answer, even to say we do not know.
-            if let last = await store.allPersons().last {
-                say(greeting(for: last), priority: .discreet, kind: "who is this")
-            } else {
+            // Explicit request: always answer, even to say we do not know. Answered from the FACE,
+            // because that is what "this" means when the wearer cannot see who is in front of them.
+            let cluster = presence.live(at: Date())
+            let known = await store.allPersons()
+            switch IdentityResolver(people: known).resolve(names: [], cluster: cluster) {
+            case .known(let person):
+                say(greeting(for: person), priority: .discreet, kind: "who is this")
+            case .likely(let person):
+                // A face got us here, so this stays a hedge no matter how confident the match was.
+                say("This might be \(person.name).", priority: .discreet, kind: "who is this HEDGE")
+            case .ambiguous(let names):
+                say("This could be \(names.joined(separator: " or ")).",
+                    priority: .discreet, kind: "who is this ASK")
+            case .unnamedCluster:
+                say("I can see someone, but I don't have a name for them.",
+                    priority: .discreet, kind: "who is this")
+            case .nothing:
                 say("I don't know who this is.", priority: .discreet, kind: "who is this")
             }
 
         case .favorite:
             // You see the barista daily and your sister monthly. Frequency cannot infer importance,
             // so an explicit designation always wins over the automatic tier.
-            if let last = await store.allPersons().last {
+            if let person = await currentPerson() {
                 do {
-                    let updated = try await store.setManualTierOverride(.inner, for: last.id)
+                    let updated = try await store.setManualTierOverride(.inner, for: person.id)
                     say("\(updated.name) is now a favourite.", priority: .normal, kind: "favourite")
                 } catch { lastError = error.localizedDescription }
             } else {
@@ -181,8 +318,11 @@ final class OmnivisionSession {
             }
 
         case .forgetThem:
-            if let last = await store.allPersons().last,
-               let removed = try? await store.delete(id: last.id) {
+            // Destructive and unrecoverable, so it must target the person actually in front of the
+            // wearer. Their face goes with them — the point of "forget" is that nothing remains.
+            if let person = await currentPerson(),
+               let removed = try? await store.delete(id: person.id) {
+                presence.clear()
                 say("Forgotten \(removed.name).", priority: .normal, kind: "forget")
             } else {
                 say("There's nobody to forget.", priority: .normal, kind: "forget")
@@ -193,12 +333,12 @@ final class OmnivisionSession {
         }
     }
 
-    private func announce(_ state: IdentityState, heard: String) async {
+    private func announce(_ state: IdentityState, heard: String, cluster: UUID?) async {
         switch state {
         case .known(let person):
             // Persist FIRST, then narrate — the stored person carries the real encounter count and
             // tier, and it is the tier that decides how much gets said.
-            let stored = await remember(person)
+            let stored = await remember(person, cluster: cluster)
             let line = greeting(for: stored)
             say(line, priority: .normal,
                 kind: "ASSERT · \(stored.effectiveTier) ×\(stored.encounterCount)", heard: heard)
@@ -217,13 +357,18 @@ final class OmnivisionSession {
     }
 
     /// Records the encounter and returns the person as stored, with an up-to-date count and tier.
+    ///
+    /// The cluster is the face that was in view when the name was heard. Passing it here is what
+    /// makes the pairing durable: on a later encounter the same face resolves back to this person
+    /// with no name spoken at all.
     @discardableResult
-    private func remember(_ person: Person) async -> Person {
+    private func remember(_ person: Person, cluster: UUID?) async -> Person {
         do {
             if let existing = await store.find(name: person.name) {
-                return try await store.registerEncounter(for: existing.id, at: Date())
+                return try await store.registerEncounter(
+                    for: existing.id, at: Date(), clusterID: cluster)
             }
-            return try await store.bind(name: person.name, org: person.org)
+            return try await store.bind(name: person.name, org: person.org, clusterID: cluster)
         } catch {
             lastError = error.localizedDescription
             return person
@@ -292,6 +437,12 @@ struct OmnivisionView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var session = OmnivisionSession()
 
+    /// Brings the glasses camera up, and subscribes to it. Injected so this file never imports the
+    /// DAT SDK — the same pattern `FrameBridge` uses, and what keeps MockDeviceKit workable.
+    /// Left nil, the session runs name-only with no face recognition.
+    var startCamera: (() async -> Void)?
+    var listenForFrames: ((@escaping (UIImage) -> Void) -> Any)?
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -317,13 +468,23 @@ struct OmnivisionView: View {
                     .frame(width: 10, height: 10)
                 Text(session.route).font(.system(size: 13, weight: .semibold))
                 Spacer()
+                Text("\(session.faceStatus) · \(session.facesSeen)")
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(session.faceStatus == "faces on" ? .green : .secondary)
                 Text("\(session.sampleRate) Hz")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
 
             Button(session.isRunning ? "Stop" : "Start") {
-                Task { session.isRunning ? session.stop() : await session.start() }
+                Task {
+                    if session.isRunning {
+                        session.stop()
+                    } else {
+                        await session.start(
+                            startCamera: startCamera, listenForFrames: listenForFrames)
+                    }
+                }
             }
             .buttonStyle(.borderedProminent)
             .tint(session.isRunning ? .red : .blue)
@@ -376,6 +537,7 @@ struct OmnivisionView: View {
         if kind.hasPrefix("HEDGE") || kind.hasPrefix("ASK") { return .orange }
         if kind.contains("held") { return .purple }
         if kind == "command" { return .blue }
+        if kind == "face" { return .teal }
         return .secondary
     }
 }

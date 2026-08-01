@@ -37,6 +37,17 @@ public actor PersonStore {
         }
     }
 
+    /// The person most recently met — the one a wearer means by "this person".
+    ///
+    /// `allPersons()` is sorted alphabetically for display. Callers wanting recency must use this
+    /// instead: reaching for `allPersons().last` yields whoever's name sorts last, which is not the
+    /// person standing in front of the wearer and is actively dangerous behind "forget them".
+    public func mostRecentlyEncountered() -> Person? {
+        peopleByID.values.max { lhs, rhs in
+            (lhs.lastEncounterAt ?? .distantPast) < (rhs.lastEncounterAt ?? .distantPast)
+        }
+    }
+
     public func snapshot() -> [Person] {
         allPersons()
     }

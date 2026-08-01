@@ -42,6 +42,27 @@ final class FaceOrientationCalibrationTests: XCTestCase {
             "upright input separated the two distributions; if this ever inverts, recalibrate")
     }
 
+    /// The provisional threshold must sit strictly inside the measured window: above every
+    /// impostor pair seen, below every genuine pair. Outside it, the face path either invents
+    /// matches or can never make one.
+    func testProvisionalThresholdSitsInsideTheMeasuredWindow() {
+        let t = EmbeddingMatcher.provisional.threshold
+        XCTAssertGreaterThan(t, Self.measuredBestImpostor, "at or below this, false accepts begin")
+        XCTAssertLessThan(t, Self.measuredWorstGenuine, "at or above this, genuine matches are lost")
+    }
+
+    /// Two vectors from the same person must match; two from different people must not.
+    func testProvisionalMatcherAcceptsGenuineAndRejectsImpostorScores() {
+        let id = UUID()
+        // A genuine pair scored 0.3836 at worst; an impostor pair 0.2874 at best.
+        let genuine = EmbeddingMatcher.provisional.nearest(to: [1, 0], among: [id: [[1, 0]]])
+        XCTAssertNotNil(genuine, "an identical vector scores 1.0 and must match")
+
+        // Orthogonal vectors score 0.0 — far below any genuine pair observed.
+        let impostor = EmbeddingMatcher.provisional.nearest(to: [1, 0], among: [id: [[0, 1]]])
+        XCTAssertNil(impostor, "an unrelated face must not match")
+    }
+
     /// The uncalibrated default must refuse everything, so a half-finished integration cannot
     /// silently identify someone. This is the guard that would have caught the old 22.0 threshold.
     func testUncalibratedMatcherRefusesEvenAnIdenticalVector() {
