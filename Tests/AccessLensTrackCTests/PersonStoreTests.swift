@@ -113,6 +113,72 @@ final class PersonStoreTests: XCTestCase {
         XCTAssertNil(recent)
     }
 
+    /// A face belongs to exactly one person. Observed on device: the wearer met someone whose face
+    /// was already stored as "Rohan" and said a name that came through as "Rohit". The face ended
+    /// up on BOTH, and the two lookup paths then disagreed about who it was —
+    /// `find(clusterID:)` takes `.first` of an unordered dictionary while `IdentityResolver` does
+    /// last-write-wins over an alphabetically sorted array. The screen said "recognised Rohan"
+    /// while the glasses said "This might be Rohit."
+    ///
+    /// The spoken name wins. Names are E0/E1 evidence and a face is only E4, so a name arriving
+    /// over a face already attached to someone else is a correction, not a second owner.
+    func testAFaceCanOnlyBelongToOnePerson() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let face = UUID()
+
+        let rohan = try await store.bind(name: "Rohan", clusterID: face)
+        let rohit = try await store.bind(name: "Rohit", clusterID: face)
+
+        let owner = await store.find(clusterID: face)
+        XCTAssertEqual(owner?.id, rohit.id, "the more recent spoken name owns the face")
+
+        let staleOwner = await store.find(id: rohan.id)
+        XCTAssertEqual(staleOwner?.clusterIDs, [], "the face must be taken off the previous person")
+    }
+
+    /// The store and the resolver must never disagree about who a face is.
+    func testStoreAndResolverAgreeOnAContestedFace() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let face = UUID()
+        _ = try await store.bind(name: "Rohan", clusterID: face)
+        _ = try await store.bind(name: "Rohit", clusterID: face)
+
+        let fromStore = await store.find(clusterID: face)
+        let people = await store.allPersons()
+        guard case .likely(let fromResolver) = IdentityResolver(people: people)
+            .resolve(names: [], cluster: face) else {
+            return XCTFail("a stored face must resolve")
+        }
+        XCTAssertEqual(fromStore?.id, fromResolver.id, "one face, one answer, whichever path asks")
+    }
+
+    /// Same rule when the face arrives on a later encounter rather than at first binding.
+    func testAnEncounterMovesAContestedFaceToTheNamedPerson() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let face = UUID()
+        let rohan = try await store.bind(name: "Rohan", clusterID: face)
+        let priya = try await store.bind(name: "Priya")
+
+        _ = try await store.registerEncounter(for: priya.id, clusterID: face)
+
+        let owner = await store.find(clusterID: face)
+        XCTAssertEqual(owner?.name, "Priya")
+        let staleOwner = await store.find(id: rohan.id)
+        XCTAssertEqual(staleOwner?.clusterIDs, [])
+    }
+
+    /// Re-binding the same person with the same face must not strip it from them.
+    func testRebindingTheSamePersonKeepsTheirFace() async throws {
+        let store = try PersonStore(url: temporaryStoreURL())
+        let face = UUID()
+        _ = try await store.bind(name: "Rohan", clusterID: face)
+        let again = try await store.bind(name: "Rohan", clusterID: face)
+
+        XCTAssertEqual(again.clusterIDs, [face])
+        let owner = await store.find(clusterID: face)
+        XCTAssertEqual(owner?.name, "Rohan")
+    }
+
     func testExistingBindRefreshesContextAndMergesCluster() async throws {
         let store = try PersonStore(url: temporaryStoreURL())
         let firstCluster = UUID()

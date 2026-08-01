@@ -257,6 +257,46 @@ Note `log collect` needs root, and `log` is shadowed by a shell alias here — u
 
 ---
 
+### 25. One face belonged to two people, and the two lookups disagreed
+
+Observed on device, 2026-08-01. The wearer met someone whose face was already stored as **Rohan**
+and spoke a name that came through as **Rohit**. Nothing stopped the cluster attaching to both.
+
+The two lookup paths then answered differently, from the same data:
+
+| path | rule | answer |
+|---|---|---|
+| `PersonStore.find(clusterID:)` | `.first` of an **unordered dictionary** | Rohan |
+| `IdentityResolver` | last-write-wins over an **alphabetically sorted** array | Rohit |
+
+So the screen read `recognised Rohan` while the glasses said *"This might be Rohit"* — in the same
+session, about the same face. Alphabetical order decided which one the wearer heard.
+
+Fixed: `PersonStore.detachCluster(_:keeping:)` enforces one face, one person at all three
+attachment points. The spoken name wins, because a name is E0/E1 evidence and a face is only E4 —
+a name arriving over an already-attached face is a correction, not a second claim. The transcript
+now says so out loud: *"this face was Rohan; the spoken name Rohit takes it"*.
+
+**Two independent lookups over the same relation is the bug.** Neither was wrong on its own; they
+were only ever going to disagree once the data allowed ambiguity, and nothing forbade it.
+
+**Still open:** a new cluster is minted whenever a frame fails to match, so one person accumulates
+several clusters — visible in the same transcript as `a face I don't have a name for` sitting
+between two `recognised Rohan` lines. It converges (the new embedding is stored and matches next
+frame) but it means an unnamed cluster can coexist with a named one for the same face.
+
+### 26. The status bar edit that silently did not apply
+
+The frame counter was reported as added when the string replacement had no-opped against a
+mismatched anchor — a literal `·` where the patch expected `\u{00B7}`. Verification checked that
+`framesSeen` appeared *somewhere* in the file, which was true of the property declaration, so the
+check passed and the claim was wrong.
+
+This is the second time a patch script has reported success for a replacement that did not happen.
+Verify the **specific** change, not a substring that other code also satisfies.
+
+---
+
 ## LOW — cleanup, but permanent if ignored
 
 ### 14. 15 MB of JPEGs are in git
@@ -302,7 +342,7 @@ Not everything is a risk. These are measured, not assumed:
 - **Name binding end-to-end on hardware** — `"Nice to meet you Priya"` → `ASSERT — Priya`, and
   `"Lumen, this is Priya"` → explicit bind, both observed live.
 - **Package text OCR at confidence 1.00** at both 30 cm and 1 m, with no aiming.
-- **343 tests passing**, including regression tests pinning every bug found this week. Runnable on
+- **347 tests passing**, including regression tests pinning every bug found this week. Runnable on
   Linux too — `scripts/swift-linux.sh test` runs the whole suite in the `swift:6.0` container, so
   validating a change does not require a Mac.
 - **222 fixture examples with zero false assertions and zero safety violations** in the Track C

@@ -142,6 +142,7 @@ public actor PersonStore {
             }
             if let clusterID {
                 unnamedClustersByID.removeValue(forKey: clusterID)
+                detachCluster(clusterID, keeping: existing.id)
             }
             existing.lastEncounterAt = at
             if existing.encounterCount == 0 {
@@ -162,6 +163,7 @@ public actor PersonStore {
         peopleByID[person.id] = person
         if let clusterID {
             unnamedClustersByID.removeValue(forKey: clusterID)
+            detachCluster(clusterID, keeping: person.id)
         }
         let encounter = Encounter(
             personID: person.id,
@@ -204,6 +206,7 @@ public actor PersonStore {
         encountersByID[encounter.id] = encounter
         if let clusterID {
             unnamedClustersByID.removeValue(forKey: clusterID)
+            detachCluster(clusterID, keeping: person.id)
         }
         try save()
         return person
@@ -323,6 +326,26 @@ public actor PersonStore {
         })
         try save()
         return removed
+    }
+
+    /// Enforces the invariant that a face cluster belongs to exactly ONE person.
+    ///
+    /// Nothing previously stopped the same cluster landing on two people, and once it did the two
+    /// lookup paths disagreed: `find(clusterID:)` takes `.first` of an unordered dictionary, while
+    /// `IdentityResolver` builds a last-write-wins map over an alphabetically sorted array. On
+    /// device that showed up as the screen reading "recognised Rohan" while the glasses said
+    /// "This might be Rohit" — the same face, two owners, two answers.
+    ///
+    /// The person being named keeps it. A name is E0/E1 evidence and a face is only E4, so a name
+    /// arriving over a face already attached to someone else is a correction rather than a second
+    /// claim. The displaced person keeps their identity and every other face they have; they just
+    /// stop owning this one.
+    private func detachCluster(_ clusterID: UUID, keeping ownerID: UUID) {
+        for (id, var person) in peopleByID where id != ownerID {
+            guard person.clusterIDs.contains(clusterID) else { continue }
+            person.clusterIDs.removeAll { $0 == clusterID }
+            peopleByID[id] = person
+        }
     }
 
     private func applyDerivedTier(to person: inout Person) {

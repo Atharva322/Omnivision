@@ -392,6 +392,15 @@ final class OmnivisionSession {
     /// with no name spoken at all.
     @discardableResult
     private func remember(_ person: Person, cluster: UUID?) async -> Person {
+        // A face that already belongs to someone else is about to change hands. The store enforces
+        // that silently — one face, one person — but silence is the wrong behaviour here: this is
+        // either a mis-cluster or a misheard name, and both are worth seeing.
+        if let cluster, let previous = await store.find(clusterID: cluster),
+           previous.name.caseInsensitiveCompare(person.name) != .orderedSame {
+            log("face", "this face was \(previous.name); the spoken name \(person.name) takes it",
+                spoken: nil)
+        }
+
         do {
             if let existing = await store.find(name: person.name) {
                 return try await store.registerEncounter(
@@ -511,7 +520,7 @@ struct OmnivisionView: View {
                     .frame(width: 10, height: 10)
                 Text(session.route).font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Text("\(session.faceStatus) · \(session.facesSeen)")
+                Text("\(session.faceStatus) · \(session.framesSeen)f/\(session.facesSeen)")
                     .font(.system(size: 12, design: .monospaced))
                     .foregroundStyle(session.faceStatus == "faces on" ? .green : .secondary)
                 Text("\(session.sampleRate) Hz")
