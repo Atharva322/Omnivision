@@ -244,7 +244,8 @@ public struct NameExtractor: NameExtracting {
         template: NameTemplate,
         utterance u: Utterance
     ) -> NameCandidate {
-        let confidence = template.prior * slot.validationConfidence * policy.asrFactor(for: u.confidence)
+        let confidence = template.prior * slot.validationConfidence
+            * policy.asrFactor(for: u.confidence, channel: u.channel)
         return NameCandidate(
             name: slot.name,
             channel: u.channel,

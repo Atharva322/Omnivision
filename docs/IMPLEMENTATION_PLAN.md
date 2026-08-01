@@ -365,9 +365,25 @@ how are you,? {NAME}
 {NAME}, (good|nice|great|how)
 ```
 
-`{NAME}` is not matched by regex alone. Run `NLTagger` with `.nameType` over the whole utterance,
-collect `.personalName` ranges, and accept a candidate **only when a personal-name range overlaps the
-template slot**. Then reject anything in `name_denylist.json`. Precision over recall — a missed name
+`{NAME}` is not matched by regex alone.
+
+> **CORRECTION — this section previously specified `NLTagger` as the validator. That was wrong, and
+> measured wrong on macOS 2026-07-31.** `NLTagger` does not tag names in greeting frames, which is
+> exactly what these templates are:
+>
+> | Input | `.personalName` |
+> |---|---|
+> | "My name is Priya and I work at Stripe." | ✓ Priya |
+> | "Priya Sharma said hello." | ✓ Priya Sharma |
+> | **"Nice to meet you Priya."** | ✗ none — the primary E1 template |
+> | **"Hi Marcus, good to see you again."** | ✗ none |
+> | any lowercase text — *what on-device ASR emits* | ✗ none |
+>
+> As a gatekeeper it would have vetoed the demo name.
+
+The gatekeeper is `PortableNameValidator` (lexicon + denylist + shape heuristics) on **every**
+platform. `NLTagger` is wired in through `CorroboratedNameValidator`, where it may **raise**
+confidence when it fires but can never reject. Precision over recall still holds — a missed name
 costs one extra spoken sentence; a wrong name poisons the store.
 
 ### Binding at conversation end

@@ -73,7 +73,19 @@ public struct NameValidation: Equatable {
 
 /// Decides whether a template slot holds a personal name.
 ///
-/// Implement this on iOS with `NLTagger`; `PortableNameValidator` is the Linux/CI stand-in.
+/// `PortableNameValidator` is the gatekeeper on EVERY platform, including iOS.
+///
+/// ⚠️ Do NOT swap in `NLTaggerNameValidator` as the gatekeeper. Measured on macOS 2026-07-31,
+/// `NLTagger` fails on precisely the greeting frames these templates target:
+///
+///     "My name is Priya and I work at Stripe."  -> Priya      ✓
+///     "Priya Sharma said hello."                -> Priya Sharma ✓
+///     "Nice to meet you Priya."                 -> (none)     ✗   <- the primary E1 template
+///     "Hi Marcus, good to see you again."       -> (none)     ✗
+///     any lowercase text                        -> (none)     ✗   <- what on-device ASR emits
+///
+/// As a gatekeeper it would veto the demo name. Use it only through
+/// `CorroboratedNameValidator`, where it can raise confidence but never reject.
 public protocol PersonalNameValidating {
     var validatorID: String { get }
     func validate(_ request: NameValidationRequest) -> NameValidation
@@ -85,7 +97,7 @@ public protocol PersonalNameValidating {
 ///
 /// ⚠️ **This is not a replacement for Apple's personal-name validation.** It has no part-of-speech
 /// model and no gazetteer beyond `GivenNameLexicon`; it decides by shape, by a common-word
-/// exclusion list, and by capitalisation. On device, `NLTaggerNameValidator` must be used. The
+/// exclusion list, and by capitalisation. This is the gatekeeper on device too — see above. The
 /// numbers produced by the fixture evaluation on Linux therefore describe *this* validator and do
 /// not predict on-device extraction accuracy.
 ///
@@ -180,16 +192,77 @@ public struct PortableNameValidator: PersonalNameValidating {
     }
 }
 
+
+// MARK: - Corroboration
+
+/// Runs a gatekeeper and, optionally, a corroborator that may only ever *raise* confidence.
+///
+/// This exists because `NLTagger` is accurate when it fires but silent on the greeting frames the
+/// templates depend on (see `NLTaggerNameValidator`). Letting it reject would veto the demo name;
+/// letting it corroborate turns a weak lexicon hit into a strong one for free.
+///
+/// Acceptance is decided by `gatekeeper` alone. The corroborator cannot rescue a rejection and
+/// cannot cause one.
+public struct CorroboratedNameValidator: PersonalNameValidating {
+
+    public let validatorID: String
+    public let gatekeeper: PersonalNameValidating
+    public let corroborator: PersonalNameValidating?
+    /// Added to the gatekeeper's confidence when the corroborator independently agrees.
+    public var boost: Float
+
+    public init(
+        gatekeeper: PersonalNameValidating,
+        corroborator: PersonalNameValidating? = nil,
+        boost: Float = 0.15
+    ) {
+        self.gatekeeper = gatekeeper
+        self.corroborator = corroborator
+        self.boost = boost
+        self.validatorID = "corroborated(\(gatekeeper.validatorID)+\(corroborator?.validatorID ?? "none"))"
+    }
+
+    public func validate(_ request: NameValidationRequest) -> NameValidation {
+        let base = gatekeeper.validate(request)
+        // A rejection is final. The corroborator never overturns the gatekeeper in either direction.
+        guard base.accepted, let corroborator else { return base }
+
+        let second = corroborator.validate(request)
+        guard second.accepted else { return base }
+
+        return NameValidation(
+            accepted: true,
+            confidence: min(1.0, base.confidence + boost),
+            validatorID: validatorID
+        )
+    }
+
+    /// The recommended production configuration: portable gatekeeper, `NLTagger` corroborating
+    /// where the platform provides it.
+    public static func platformDefault(
+        denylistBacked gatekeeper: PersonalNameValidating = PortableNameValidator()
+    ) -> CorroboratedNameValidator {
+        #if canImport(NaturalLanguage)
+        return CorroboratedNameValidator(gatekeeper: gatekeeper, corroborator: NLTaggerNameValidator())
+        #else
+        return CorroboratedNameValidator(gatekeeper: gatekeeper, corroborator: nil)
+        #endif
+    }
+}
+
 // MARK: - Apple implementation (not compiled or tested on Linux)
 
 #if canImport(NaturalLanguage)
 import NaturalLanguage
 
-/// `NLTagger`-backed validation, exactly as specified in the implementation plan.
+/// `NLTagger`-backed validation.
 ///
-/// ⚠️ **Written on Linux, compiled only on Apple platforms, and NOT executed or tested by this
-/// package.** The iOS engineer must verify it against real on-device transcripts before it is
-/// relied on. It is provided so the seam is not left as an empty protocol.
+/// **Tested on macOS 2026-07-31 and found unsuitable as a gatekeeper** — it does not tag names in
+/// greeting frames ("Nice to meet you Priya", "Hi Marcus") and tags nothing at all in lowercase
+/// text, which is what on-device ASR produces. It is accurate when it *does* fire, so it is useful
+/// only as corroboration.
+///
+/// Use via `CorroboratedNameValidator`. Never as the sole authority.
 public struct NLTaggerNameValidator: PersonalNameValidating {
 
     public let validatorID = "nltagger.v1"

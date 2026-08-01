@@ -11,9 +11,19 @@
 
 import Foundation
 
-/// Tunable numbers for extraction. Every default here is **provisional** — Track C's Hour-1
-/// wearer-vs-other WER measurement (gate G1) is what calibrates them, and that measurement needs
-/// the glasses. Nothing in this file was tuned against real 8 kHz HFP audio.
+/// Tunable numbers for extraction.
+///
+/// **G1 RAN 2026-07-31 — these are now calibrated, not provisional.** Measured on real HFP audio
+/// (16 kHz wideband, not the 8 kHz the Meta docs claim), quiet room, word error rate against a
+/// fixed script:
+///
+///     distance      0.3m   0.6m   1.0m   2.0m
+///     WEARER          0%     0%     0%     0%     name captured every time
+///     OTHER          55%    36%     9%    64%     name captured only at 1.0m
+///
+/// The wearer's mouth sits at a fixed distance from the array regardless of where anyone else
+/// stands, which is why that row is flat. The other speaker is non-monotonic — the forward-facing
+/// beam pattern means they are off-axis up close and attenuated far away.
 public struct NameExtractionPolicy {
 
     /// Validation confidence a slot must reach, by template strength.
@@ -29,12 +39,25 @@ public struct NameExtractionPolicy {
     /// Utterances below this recogniser confidence produce no candidates at all.
     public var minimumASRConfidence: Float
 
-    /// Substituted when `Utterance.confidence` is 0.
+    /// Substituted when `Utterance.confidence` is 0, for the WEARER channel.
     ///
-    /// `SFSpeechRecognizer` reports 0 for partial hypotheses, so a literal 0 means "unknown", not
-    /// "certainly wrong" — multiplying by it would silently zero every candidate. See
-    /// docs/TRACK_C.md → "Integration issues": partial results must not be fed to the extractor.
+    /// `SFSpeechRecognizer` reports 0 for partial hypotheses — and on-device it reports 0 for
+    /// finals too, so in practice this substitute is used for *every* utterance. A literal 0 means
+    /// "unknown", not "certainly wrong"; multiplying by it would silently zero every candidate.
+    ///
+    /// Set high because G1 measured the wearer channel at 0% WER at every distance tested. Treating
+    /// "unknown" as "probably fine" is justified for this channel and nothing else.
+    ///
+    /// Kept just below 1.0 so an explicit high recogniser confidence still outranks silence —
+    /// `NameExtractorTests.testZeroConfidenceIsTreatedAsUnknownNotAsWrong` pins that ordering.
     public var neutralASRConfidence: Float
+
+    /// Substituted when `Utterance.confidence` is 0, for the OTHER channel.
+    ///
+    /// Deliberately much lower: G1 measured 9% WER at 1.0m but 36–64% either side of it. Other-
+    /// channel evidence should therefore hedge unless something else corroborates it, and this is
+    /// where that policy lives — explicitly, rather than emerging by accident from the arithmetic.
+    public var neutralOtherChannelASRConfidence: Float
 
     public init(
         strongThreshold: Float = 0.55,
@@ -43,7 +66,8 @@ public struct NameExtractionPolicy {
         multiTokenThreshold: Float = 0.80,
         maxNameTokens: Int = 2,
         minimumASRConfidence: Float = 0.30,
-        neutralASRConfidence: Float = 0.60
+        neutralASRConfidence: Float = 0.90,
+        neutralOtherChannelASRConfidence: Float = 0.55
     ) {
         self.strongThreshold = strongThreshold
         self.mediumThreshold = mediumThreshold
@@ -52,6 +76,7 @@ public struct NameExtractionPolicy {
         self.maxNameTokens = maxNameTokens
         self.minimumASRConfidence = minimumASRConfidence
         self.neutralASRConfidence = neutralASRConfidence
+        self.neutralOtherChannelASRConfidence = neutralOtherChannelASRConfidence
     }
 
     public static let `default` = NameExtractionPolicy()
@@ -65,8 +90,12 @@ public struct NameExtractionPolicy {
     }
 
     /// Recogniser confidence folded into the candidate score, with 0 read as "unknown".
-    public func asrFactor(for confidence: Float) -> Float {
-        confidence <= 0 ? neutralASRConfidence : min(confidence, 1.0)
+    ///
+    /// The substitute is channel-dependent because G1 measured the two channels as wildly
+    /// different. Callers that cannot supply a channel get the conservative other-channel value.
+    public func asrFactor(for confidence: Float, channel: Channel = .other) -> Float {
+        guard confidence <= 0 else { return min(confidence, 1.0) }
+        return channel == .wearer ? neutralASRConfidence : neutralOtherChannelASRConfidence
     }
 }
 
