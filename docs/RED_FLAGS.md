@@ -196,8 +196,13 @@ Not everything is a risk. These are measured, not assumed:
 - **Name binding end-to-end on hardware** — `"Nice to meet you Priya"` → `ASSERT — Priya`, and
   `"Lumen, this is Priya"` → explicit bind, both observed live.
 - **Package text OCR at confidence 1.00** at both 30 cm and 1 m, with no aiming.
-- **224 tests passing on macOS**, including regression tests pinning every bug found this week.
-- **161 fixture examples with zero false assertions** in the Track C evaluator.
+- **259 tests passing**, including regression tests pinning every bug found this week. Runnable on
+  Linux too — `scripts/swift-linux.sh test` runs the whole suite in the `swift:6.0` container, so
+  validating a change does not require a Mac.
+- **222 fixture examples with zero false assertions and zero safety violations** in the Track C
+  evaluator, including the seven transcripts the recogniser actually emitted on device on
+  2026-08-01 (`Fixtures/hardware_observed.json`) — among them the mangled
+  `"Nice to meet you you"`, which correctly produced no candidate.
 
 The accuracy doctrine has held up under every test: the system has not once claimed something it
 could not support.

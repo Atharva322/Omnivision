@@ -146,6 +146,13 @@ EvidenceAssessor.assess(extractor.candidates(in: Utterance(text: "Hey Marcus", c
 
 ## Robustness across speakers, rates and accents
 
+`Fixtures/hardware_observed.json` holds the seven transcripts `SFSpeechRecognizer` **actually
+emitted** on the glasses during the on-device run of 2026-08-01 (Glasses HFP, 16 kHz, quiet room).
+They are the only fixtures here backed by real acoustics rather than by someone's idea of what
+degraded speech looks like, and the file should grow after every hardware session. The one that
+matters: the recogniser mangled a name into `"Nice to meet you you"` and extraction produced **no
+candidate** rather than binding "you" as a person.
+
 `Fixtures/asr_robustness.json` (54 cases) measures what happens when different people say the same
 sentence. **It is not a voice test.** No audio, microphone or recogniser is involved. What varies
 between two speakers — rate, accent, hesitation, vocal effort — reaches this code only as *text
