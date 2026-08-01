@@ -203,6 +203,34 @@ is one sentence, and a wrong name is stored, spoken aloud as fact, and invisible
 cannot see the screen. `"Lumen, this is <name>"` remains the E0 path that binds anything,
 unconditionally.
 
+### Corroboration buys that recall back
+
+`SocialMemoryCoordinator` accumulates candidates across the whole conversation and assesses once at
+binding, so `EvidenceAssessor` can see that two *different* frames landed on the same name:
+
+```
+"nice to meet you adaobi"                       → hedge   (one frame, unverifiable name)
+"nice to meet you adaobi" + "good to see you adaobi"
+                                                → ASSERT  (corroborated by 2 frames)
+```
+
+Distinct **templates** is the unit, not a raw count. The same frame heard twice is one speech act
+repeated, and an ASR truncation truncates identically the second time — so `"nice to meet you
+adaobi"` twice is *not* corroboration. Two different frames converging on the same token is what
+makes an artefact unlikely. The boost (×1.30) is sized to clear `wearerAssertThreshold` and no
+further, and `EvidenceAssessment.effectiveConfidence` / `.corroboratingTemplates` put it in the event
+log rather than hiding it inside the candidate score.
+
+Corroboration **never** changes the evidence rung, and **never** resolves a conflict — two
+corroborated names still ask.
+
+**Known limit.** An unfamiliar name scores 0.50, which only clears a *strong* template. So
+`"thanks adaobi"` produces no candidate at all and cannot corroborate anything: corroborating an
+unfamiliar name needs two strong frames (`nice/good to meet/see you`, `this is`, `how are you`).
+Lowering the medium tier to fix that would widen the false-positive surface of `thanks`, which is
+not worth it. `CorroborationTests.testAMediumFrameCannotCorroborateAnUnfamiliarName` pins the
+behaviour so it is a documented limit rather than a surprise.
+
 ---
 
 ## Why precision over recall
