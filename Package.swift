@@ -17,7 +17,10 @@ let package = Package(
         .library(name: "AccessLensTrackC", targets: ["AccessLensTrackC"])
     ],
     targets: [
-        .target(name: "AccessLensTrackC"),
+        .target(
+            name: "AccessLensTrackC",
+            resources: [.process("Resources")]
+        ),
         .testTarget(
             name: "AccessLensTrackCTests",
             dependencies: ["AccessLensTrackC"]
