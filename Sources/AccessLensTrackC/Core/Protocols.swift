@@ -59,13 +59,13 @@ public protocol Narrating {
     static func line(for person: Person) -> String
 }
 
-public enum Priority: Sendable {
+public enum Priority: Equatable, Sendable {
     case critical
     case normal
     case discreet
 }
 
-public enum Earcon: Sendable {
+public enum Earcon: CaseIterable, Equatable, Sendable {
     case captureOn
     case captureOff
     case saved
