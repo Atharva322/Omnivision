@@ -1,0 +1,81 @@
+{
+  "name": "commands",
+  "description": "Wake-word spotting and the nine-command grammar. Text-only fixtures: these measure the parser, NOT microphone accuracy. No number produced from this file describes what the Ray-Ban Meta hardware hears.",
+  "cases": [
+    { "id": "cmd-001", "category": "clean", "text": "Lumen, remember this", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-002", "category": "asr-lowercase", "text": "lumen remember this", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-003", "category": "casing", "text": "LUMEN, REMEMBER THIS", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-004", "category": "punctuation", "text": "Lumen... remember this!", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-005", "category": "whitespace", "text": "   Lumen,    remember   this   ", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-006", "category": "leading-filler", "text": "Okay Lumen, remember this", "expect": { "command": "rememberThis" } },
+    { "id": "cmd-007", "category": "leading-filler", "text": "Hey Lumen, pause", "expect": { "command": "pause" } },
+
+    { "id": "cmd-010", "category": "clean", "text": "Lumen, stop", "expect": { "command": "endCapture" } },
+    { "id": "cmd-011", "category": "punctuation", "text": "Lumen, stop.", "expect": { "command": "endCapture" } },
+    { "id": "cmd-012", "category": "trailing-filler", "text": "Lumen, stop recording", "expect": { "command": "endCapture" } },
+    { "id": "cmd-013", "category": "clean", "text": "Lumen, done", "expect": { "command": "endCapture" } },
+    { "id": "cmd-014", "category": "asr-lowercase", "text": "lumen done", "expect": { "command": "endCapture" } },
+
+    { "id": "cmd-020", "category": "clean", "text": "Lumen, who is this?", "expect": { "command": "whoIsThis" } },
+    { "id": "cmd-021", "category": "contraction", "text": "lumen who's this", "expect": { "command": "whoIsThis" } },
+
+    { "id": "cmd-030", "category": "clean", "text": "Lumen, this is Priya", "expect": { "command": "bind", "argument": "Priya", "name": "Priya", "evidence": "E0", "template": "e0.explicit_bind" } },
+    { "id": "cmd-031", "category": "asr-lowercase", "text": "lumen this is priya", "expect": { "command": "bind", "argument": "Priya", "name": "Priya", "evidence": "E0", "template": "e0.explicit_bind" } },
+    { "id": "cmd-032", "category": "punctuation", "text": "Lumen, this is Marcus.", "expect": { "command": "bind", "argument": "Marcus", "name": "Marcus", "evidence": "E0", "template": "e0.explicit_bind" } },
+    { "id": "cmd-033", "category": "linguistic-variety", "text": "Lumen, this is Oluwaseun", "expect": { "command": "bind", "argument": "Oluwaseun", "name": "Oluwaseun", "evidence": "E0", "template": "e0.explicit_bind" } },
+    { "id": "cmd-034", "category": "two-token-name", "text": "Lumen, this is Mary Beth", "expect": { "command": "bind", "argument": "Mary Beth", "name": "Mary Beth", "evidence": "E0", "template": "e0.explicit_bind" } },
+    { "id": "cmd-035", "category": "ambiguous-word-name", "text": "Lumen, this is Mark", "note": "E0 is a strong template, so a word that is also a name is allowed here even though 'Hey Mark' is not.", "expect": { "command": "bind", "argument": "Mark", "name": "Mark", "evidence": "E0", "template": "e0.explicit_bind" } },
+
+    { "id": "cmd-040", "category": "clean", "text": "Lumen, that's wrong", "expect": { "command": "thatsWrong" } },
+    { "id": "cmd-041", "category": "asr-lowercase", "text": "lumen thats wrong", "expect": { "command": "thatsWrong" } },
+    { "id": "cmd-042", "category": "variant", "text": "Lumen, that is wrong", "expect": { "command": "thatsWrong" } },
+
+    { "id": "cmd-050", "category": "clean", "text": "Lumen, remind me to send her the deck", "expect": { "command": "remindMe", "argument": "send her the deck" } },
+    { "id": "cmd-051", "category": "asr-lowercase", "text": "lumen remind me to ask about the budget", "expect": { "command": "remindMe", "argument": "ask about the budget" } },
+    { "id": "cmd-052", "category": "punctuation", "text": "Lumen, remind me to follow up on Tuesday.", "expect": { "command": "remindMe", "argument": "follow up on Tuesday" } },
+
+    { "id": "cmd-060", "category": "clean", "text": "Lumen, favorite", "expect": { "command": "favorite" } },
+    { "id": "cmd-061", "category": "spelling-variant", "text": "Lumen, favourite", "expect": { "command": "favorite" } },
+    { "id": "cmd-062", "category": "clean", "text": "Lumen, forget them", "expect": { "command": "forgetThem" } },
+    { "id": "cmd-063", "category": "clean", "text": "Lumen, pause", "expect": { "command": "pause" } },
+    { "id": "cmd-064", "category": "trailing-filler", "text": "Lumen, pause now", "expect": { "command": "pause" } },
+
+    { "id": "cmd-100", "category": "false-positive", "text": "the lumen output of that bulb is too low", "note": "'lumen' as the unit of luminous flux, mid-sentence.", "expect": { "command": null } },
+    { "id": "cmd-101", "category": "false-positive", "text": "I picked up a 500 lumen flashlight", "expect": { "command": null } },
+    { "id": "cmd-102", "category": "false-positive", "text": "Lumen is a unit of luminous flux", "note": "Wake word in first position, but the remainder is not a grammar row.", "expect": { "command": null } },
+    { "id": "cmd-103", "category": "false-positive", "text": "I was reading about lumens yesterday", "expect": { "command": null } },
+    { "id": "cmd-104", "category": "false-positive", "text": "so I told him lumen, stop", "note": "Wake word too deep in the sentence to be an invocation.", "expect": { "command": null } },
+    { "id": "cmd-105", "category": "false-positive", "text": "Lumen, stop by the store later", "note": "'stop' is present but the remainder is conversation, not a command.", "expect": { "command": null } },
+
+    { "id": "cmd-110", "category": "near-miss-wake-word", "text": "Lumens, remember this", "expect": { "command": null } },
+    { "id": "cmd-111", "category": "near-miss-wake-word", "text": "Lumin, remember this", "expect": { "command": null } },
+    { "id": "cmd-112", "category": "near-miss-wake-word", "text": "Loomin, remember this", "expect": { "command": null } },
+    { "id": "cmd-113", "category": "near-miss-wake-word", "text": "Luman, stop", "expect": { "command": null } },
+    { "id": "cmd-114", "category": "near-miss-wake-word", "text": "Lemon, pause", "expect": { "command": null } },
+    { "id": "cmd-115", "category": "near-miss-wake-word", "text": "Human, stop", "expect": { "command": null } },
+    { "id": "cmd-116", "category": "partial-wake-word", "text": "Lu, remember this", "expect": { "command": null } },
+    { "id": "cmd-117", "category": "partial-wake-word", "text": "Lume, stop", "expect": { "command": null } },
+
+    { "id": "cmd-120", "category": "no-wake-word", "text": "remember this", "expect": { "command": null } },
+    { "id": "cmd-121", "category": "no-wake-word", "text": "can you forget them please", "expect": { "command": null } },
+
+    { "id": "cmd-130", "category": "partial-transcript", "text": "Lumen,", "expect": { "command": null } },
+    { "id": "cmd-131", "category": "partial-transcript", "text": "Lumen, this is", "expect": { "command": null } },
+    { "id": "cmd-132", "category": "partial-transcript", "text": "Lumen, remind me to", "expect": { "command": null } },
+    { "id": "cmd-133", "category": "partial-transcript", "text": "Lumen, remember", "expect": { "command": null } },
+    { "id": "cmd-134", "category": "partial-transcript", "text": "Lumen, who is", "expect": { "command": null } },
+
+    { "id": "cmd-140", "category": "invalid-name-slot", "text": "Lumen, this is great", "expect": { "command": null, "name": null } },
+    { "id": "cmd-141", "category": "invalid-name-slot", "text": "Lumen, this is everyone", "expect": { "command": null, "name": null } },
+    { "id": "cmd-142", "category": "invalid-name-slot", "text": "Lumen, this is the budget meeting", "expect": { "command": null, "name": null } },
+
+    { "id": "cmd-150", "category": "malformed", "text": "", "expect": { "command": null } },
+    { "id": "cmd-151", "category": "malformed", "text": "     ", "expect": { "command": null } },
+    { "id": "cmd-152", "category": "malformed", "text": "!!!,,,...", "expect": { "command": null } },
+    { "id": "cmd-153", "category": "malformed", "text": "🎉😀🎊", "expect": { "command": null } },
+    { "id": "cmd-154", "category": "malformed", "text": "lumen lumen lumen lumen lumen", "expect": { "command": null } },
+
+    { "id": "cmd-160", "category": "wrong-channel", "text": "Lumen, forget them", "channel": "other", "note": "A bystander must not be able to issue a destructive command.", "expect": { "command": null } },
+    { "id": "cmd-161", "category": "wrong-channel", "text": "Lumen, this is Priya", "channel": "other", "expect": { "command": null, "name": null } }
+  ]
+}

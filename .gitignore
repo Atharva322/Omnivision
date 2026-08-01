@@ -1,10 +1,17 @@
 .DS_Store
-xcuserdata/
-*.xcuserstate
-build/
-DerivedData/
 .env
 .env.local
+
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# SwiftPM (Track C package)
+.build/
+.swiftpm/
+Package.resolved
 
 # Private notes — never committed
 notes/
