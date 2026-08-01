@@ -428,6 +428,43 @@ Collecting still needs root, which an agent session does not have:
 
 ---
 
+### 36. A brand is not one line, and `lastMatch` was never read
+
+Diagnosed by running the real pipeline over photographs of the two test packages
+(`Tools/shopcalib`), rather than from another screenshot. Two separate faults:
+
+**The saved brand is spread across the bag.** "Seattle Sourdough Baking Company" comes back from
+Vision as `SEATTLI`, `SOURDOUGH`, `BAKING COM` — three observations, none equal to the brand, all of
+it. The matcher only compared whole lines, so it found no brand and reported *"This is WATERFRONT
+SOURDOUGH, not your usual Seattle Sourdough Baking Company Waterfront"* — denying the loaf in the
+same sentence that names it. Now matched by token coverage across the whole frame.
+
+**Narration never checked whether anything had changed.** `lastMatch` was assigned and never read,
+so every frame re-announced and the 90-second cooldown became a metronome. Comparing whole matches
+would not have helped: OCR jitter changes the payload every frame ("Juang", "Juanz", "Jung"), so
+each looks like news. `ProductMatch.conclusion` gives the verdict a stable identity independent of
+the text that produced it, and proactive narration now fires on transitions only.
+
+**A brand-only preference is a fully met preference.** A wearer who saved "Sourdough" was met with
+silence every time they picked up sourdough, because `.brandOnly` had been made requested-only.
+That was right for a preference that names a variant and wrong for one that does not — nothing is
+outstanding when the brand IS the whole preference. Narration now makes that distinction, which
+leaves the matcher's semantics (and its test) intact.
+
+Measured after the fix, over both packages in all four orientations:
+
+    sourdough (8/8 frames)   "This is your usual Sourdough."
+    muffins   (8/8 frames)   "This is EXTRA CRISP …, not your usual Sourdough."
+
+Orientation-independent, which matters because glasses frames arrive rotated.
+
+**Two design calls deferred to the teammate rather than overridden.** Their substitution catch for
+unrelated brands, and their fuller "brand + variant" naming, both look wrong under OCR noise and
+both are right with clean text. The fix belonged in the matching and in when narration fires, not
+in deleting their behaviour. I had already overridden them once (#34) and had to put it back.
+
+---
+
 ## LOW — cleanup, but permanent if ignored
 
 ### 14. 15 MB of JPEGs are in git
@@ -473,7 +510,7 @@ Not everything is a risk. These are measured, not assumed:
 - **Name binding end-to-end on hardware** — `"Nice to meet you Priya"` → `ASSERT — Priya`, and
   `"Lumen, this is Priya"` → explicit bind, both observed live.
 - **Package text OCR at confidence 1.00** at both 30 cm and 1 m, with no aiming.
-- **361 tests passing**, including regression tests pinning every bug found this week. Runnable on
+- **365 tests passing**, including regression tests pinning every bug found this week. Runnable on
   Linux too — `scripts/swift-linux.sh test` runs the whole suite in the `swift:6.0` container, so
   validating a change does not require a Mac.
 - **222 fixture examples with zero false assertions and zero safety violations** in the Track C

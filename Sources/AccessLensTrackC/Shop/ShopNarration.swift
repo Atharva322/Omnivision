@@ -35,7 +35,7 @@ public enum ShopNarration {
             // Barcode evidence is exact. This is the one line in the shop flow permitted to state
             // a fact — hedging here would understate what is actually known.
             return Announcement(
-                text: "This is your \(product.label).",
+                text: "This is your usual \(product.label).",
                 source: .product,
                 priority: .normal,
                 dedupeKey: "product:usual:\(product.barcode)",
@@ -99,7 +99,20 @@ public enum ShopNarration {
             // Brand and variant both confirmed by exact token-set match. The one case in the
             // text path permitted to state a fact.
             return Announcement(
-                text: "This is your \(product.label).",
+                text: "This is your usual \(product.label).",
+                source: .product,
+                priority: .normal,
+                dedupeKey: "text:exact:\(product.category)",
+                at: time)
+
+        case .brandOnly(let product, let seenVariant) where product.variant == nil:
+            // No variant was ever saved, so the BRAND IS the whole preference — and it has just
+            // been confirmed. Nothing is outstanding, so this is an assertion, and it is the
+            // answer to "tell me when I'm holding my usual bread". Suppressing it as a hedge left
+            // a wearer who saved "Sourdough" in silence every time they picked up sourdough.
+            _ = seenVariant
+            return Announcement(
+                text: "This is your usual \(product.label).",
                 source: .product,
                 priority: .normal,
                 dedupeKey: "text:exact:\(product.category)",
@@ -140,6 +153,10 @@ public enum ShopNarration {
             // different brand) and need different phrasing. Compare against `expected.brand`
             // rather than carrying a separate flag, since the matcher already puts the right
             // value in `brand` for each case.
+            // Naming both brand and variant can recite two garbled observations at once — a real
+            // package produced "This is NO High Fructore SATA BISP, not your usual Sourdough".
+            // Kept anyway: with clean text it tells the wearer what they are actually holding,
+            // which is the point, and this now speaks once per change rather than on a metronome.
             let sameBrand = TextNormalizer.tokens(in: brand) == TextNormalizer.tokens(in: expected.brand)
             let found = sameBrand
                 ? (variant ?? "something else")

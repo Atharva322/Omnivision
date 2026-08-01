@@ -320,7 +320,21 @@ final class ShopSession {
                 }
             }
 
+            // Narrate proactively only when the CONCLUSION changes.
+            //
+            // `lastMatch` was recorded and never consulted, so every frame re-announced and the
+            // 90-second cooldown became a metronome: hold one package and hear the same sentence
+            // forever. Comparing whole matches would not have helped — OCR jitter changes the
+            // payload every frame ("Juang", "Juanz", "Jung"), so each looked like news.
+            //
+            // A requested answer is always given: the wearer asked, and "the same as last time"
+            // is a perfectly good answer to a question.
+            let previous = lastMatch
             lastMatch = match
+            if mode == .proactive, previous?.conclusion == match.conclusion {
+                return
+            }
+
             let announcement = ShopNarration.announcement(for: match, mode: mode, at: Date())
             speak(announcement, mode: mode, kind: "product")
         } catch {

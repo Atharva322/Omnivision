@@ -29,6 +29,24 @@ public enum ProductMatch: Equatable, Sendable {
     case nothingLegible
 }
 
+extension ProductMatch {
+    /// What this match CONCLUDED, independent of the text that produced it.
+    ///
+    /// OCR jitter changes the payload every frame — "Juang", "Juanz", "Jung" — so comparing whole
+    /// matches makes every frame look like news, and proactive narration repeats forever. The
+    /// conclusion is what the wearer actually needs to hear about, and it only changes when the
+    /// thing in their hands does.
+    public var conclusion: String {
+        switch self {
+        case .exact(let p): return "exact:\(p.category)"
+        case .brandOnly(let p, _): return "brandOnly:\(p.category)"
+        case .differentProduct(_, _, let expected): return "different:\(expected.category)"
+        case .noPreferenceSet: return "noPreferenceSet"
+        case .nothingLegible: return "nothingLegible"
+        }
+    }
+}
+
 public enum ProductTextMatcher {
 
     public static func match(_ text: PackageText, against catalog: ProductCatalog, category: String) -> ProductMatch {
@@ -48,10 +66,16 @@ public enum ProductTextMatcher {
         // Exact equality first — free, and the common case when the label is square to the camera.
         // Then OCR-tolerant comparison, because a single misread character is not a different loaf.
         // See PackageTextQuality for the measurement that sets the threshold.
+        // Three ways the brand can be present, cheapest first: an exact line, one line that is the
+        // brand misread, or the brand's words scattered across several lines. The third is the
+        // common case on a real package, where the brand wraps around the bag.
+        let allLines = text.lines.map(\.text)
         let brandLineIndex = lineTokens.firstIndex(where: { $0 == brandTokens })
             ?? text.lines.firstIndex(where: {
                 PackageTextQuality.namesTheSameThing($0.text, expected.brand)
             })
+            ?? (PackageTextQuality.containsBrand(expected.brand, in: allLines)
+                ? bestBrandLine(in: text, brand: expected.brand) : nil)
 
         guard let brandLineIndex else {
             // The expected brand is not legible anywhere in frame, but something else is. Picking
@@ -69,6 +93,10 @@ public enum ProductTextMatcher {
         guard let expectedVariant = expected.variant, !expectedVariant.isEmpty else {
             // The saved preference has no variant on file (e.g. saved from a single photo where
             // only the brand was legible). Brand-only is the most this can ever confirm.
+            //
+            // Narration draws the distinction that matters here: a preference with NO saved
+            // variant is fully satisfied by the brand, so it may be asserted; one that HAS a
+            // saved variant is genuinely unconfirmed and must stay a hedge.
             return .brandOnly(expected, seenVariant: otherLine(in: text, excluding: brandLineIndex))
         }
 
@@ -102,6 +130,15 @@ public enum ProductTextMatcher {
 
     /// The next most prominent line after the brand line, if any — the package's best candidate
     /// for a variant when it does not match what was expected.
+    /// Which line to treat as "the brand line" when the brand is spread over several. Whichever
+    /// shares the most with it — so the remaining lines are still searched for the variant.
+    private static func bestBrandLine(in text: PackageText, brand: String) -> Int? {
+        text.lines.indices.max {
+            PackageTextQuality.similarity(text.lines[$0].text, brand)
+                < PackageTextQuality.similarity(text.lines[$1].text, brand)
+        }
+    }
+
     private static func otherLine(in text: PackageText, excluding brandIndex: Int) -> String? {
         text.lines.enumerated().first { $0.offset != brandIndex }?.element.text
     }

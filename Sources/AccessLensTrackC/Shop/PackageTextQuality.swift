@@ -57,6 +57,42 @@ public enum PackageTextQuality {
         similarity(a, b) >= sameVariantThreshold
     }
 
+    /// Whether the expected name is present ACROSS the frame, rather than on any single line.
+    ///
+    /// A brand is not always one observation. "Seattle Sourdough Baking Company" is set around the
+    /// bag and comes back as "SEATTLI", "SOURDOUGH", "BAKING COM" — three lines, none of which
+    /// equals the brand, all of which are the brand. Comparing line-by-line found nothing and told
+    /// the wearer their own loaf was not their usual.
+    ///
+    /// Every expected token must be found somewhere, fuzzily, in the recognised text. Enough of
+    /// them present means the brand is there; a package that shares no words with it is a
+    /// different product.
+    public static func coverage(of expected: String, in candidates: [String]) -> Double {
+        let wanted = words(in: expected)
+        guard !wanted.isEmpty else { return 0 }
+        let seen = candidates.flatMap { words(in: $0) }
+        guard !seen.isEmpty else { return 0 }
+
+        let found = wanted.filter { want in
+            seen.contains { namesTheSameThing($0, want) }
+        }
+        return Double(found.count) / Double(wanted.count)
+    }
+
+    /// Half the brand's words, found. Below this the frame simply does not show the brand.
+    public static let brandCoverageThreshold = 0.5
+
+    public static func containsBrand(_ brand: String, in candidates: [String]) -> Bool {
+        coverage(of: brand, in: candidates) >= brandCoverageThreshold
+    }
+
+    private static func words(in text: String) -> [String] {
+        text.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+            // One- and two-character fragments carry no identity and match far too much.
+            .filter { $0.count >= 3 }
+    }
+
     /// The text if it is words, or nil if it is noise.
     ///
     /// Weights, barcode digits and fragments were all being recited to the wearer as if they named

@@ -17,7 +17,7 @@ final class ProductTextNarrationTests: XCTestCase {
         let announcement = try XCTUnwrap(
             ShopNarration.announcement(for: .exact(davesKillerBread), mode: .proactive))
 
-        XCTAssertEqual(announcement.text, "This is your Dave's Killer Bread 21 Whole Grains.")
+        XCTAssertEqual(announcement.text, "This is your usual Dave's Killer Bread 21 Whole Grains.")
         XCTAssertFalse(
             announcement.text.lowercased().contains("might"),
             "brand+variant text match is exact evidence — hedging here understates what is known")
@@ -36,17 +36,23 @@ final class ProductTextNarrationTests: XCTestCase {
         XCTAssertEqual(announcement.text, "This is Dave's Killer Bread, but I can't read which one.")
     }
 
-    /// The other route into `.brandOnly`: a variant IS legible, but nothing was ever saved to
-    /// compare it against. Must name what is seen without claiming it as "your usual" — that is
-    /// the exact overstatement the matcher's own tests guard against.
-    func testBrandOnlyWithNoSavedVariantNamesWhatItSeesWithoutClaimingIt() throws {
+    /// The other route into `.brandOnly`: a variant IS legible, but NOTHING WAS EVER SAVED for it.
+    ///
+    /// This originally required the wording to avoid "your usual". That was right while the match
+    /// was treated as unconfirmed — but nothing is outstanding here: the wearer saved a brand and
+    /// the brand is confirmed, so the preference is fully met. Requiring a hedge meant someone who
+    /// saved "Sourdough" heard nothing at all every time they picked up sourdough, which is the
+    /// entire feature.
+    ///
+    /// A preference that DOES name a variant still hedges — see
+    /// `testBrandOnlyWithNothingElseLegibleHedges`.
+    func testBrandOnlyWithNoSavedVariantIsAFullyMetPreference() throws {
         let brandOnlyPreference = SavedProduct(barcode: "", brand: "Oatly", variant: nil, category: "milk")
         let announcement = try XCTUnwrap(
             ShopNarration.announcement(
-                for: .brandOnly(brandOnlyPreference, seenVariant: "Chocolate"), mode: .requested))
+                for: .brandOnly(brandOnlyPreference, seenVariant: "Chocolate"), mode: .proactive))
 
-        XCTAssertTrue(announcement.text.contains("Chocolate"))
-        XCTAssertFalse(announcement.text.lowercased().contains("your usual"))
+        XCTAssertEqual(announcement.text, "This is your usual Oatly.")
     }
 
     // MARK: - Step 3: .differentProduct names what is held AND what was wanted — same brand case

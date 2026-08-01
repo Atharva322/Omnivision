@@ -288,4 +288,104 @@ final class ProductTextMatcherTests: XCTestCase {
             .brandOnly(sourdough, seenVariant: nil),
             "unreadable is unreadable; it is not a different variant")
     }
+
+    // MARK: - Real packages, photographed 2026-08-01
+
+    private var seattleSourdough: SavedProduct {
+        SavedProduct(
+            barcode: "", brand: "Seattle Sourdough Baking Company",
+            variant: "Waterfront", category: "bread")
+    }
+
+    /// A brand printed across SEVERAL lines must still be recognised.
+    ///
+    /// Vision returns "SEATTLI", "SOURDOUGH", "BAKING COM" as separate observations, because that
+    /// is how the label is set — the brand wraps around the bag while the variant is the biggest
+    /// thing on it. Comparing whole lines finds no brand and reports "This is WATERFRONT
+    /// SOURDOUGH, not your usual Seattle Sourdough Baking Company Waterfront" — denying the loaf
+    /// while naming it.
+    func testABrandSplitAcrossLinesIsStillTheBrand() {
+        var catalog = ProductCatalog()
+        catalog.save(seattleSourdough)
+
+        // Verbatim from the device, photo b1, orientation .right.
+        let text = PackageText(lines: [
+            line("ANATER FRONT", height: 0.9),
+            line("SOURDOUGH", height: 0.8),
+            line("SEATTLE", height: 0.5),
+            line("BAKING COM", height: 0.4),
+        ])
+
+        XCTAssertEqual(
+            ProductTextMatcher.match(text, against: catalog, category: "bread"),
+            ProductMatch.exact(seattleSourdough),
+            "the brand is all over the bag; it is still the brand")
+    }
+
+    /// The wearer's stated goal: "whenever I look at sourdough it should say this is your usual".
+    func testAShortSavedBrandMatchesTheProminentText() {
+        let sourdough = SavedProduct(
+            barcode: "", brand: "Sourdough", variant: nil, category: "bread")
+        var catalog = ProductCatalog()
+        catalog.save(sourdough)
+
+        let text = PackageText(lines: [
+            line("WATERFRONT", height: 0.9),
+            line("SOURDOUGH", height: 0.8),
+            line("NET WT 24 OZ (1 LB 8 OZ) 680g", height: 0.3),
+        ])
+
+        // The match stays `.brandOnly` — nothing more than the brand was ever saved, so nothing
+        // more can be confirmed. What matters is what the wearer HEARS, unprompted.
+        let match = ProductTextMatcher.match(text, against: catalog, category: "bread")
+        let spoken = ShopNarration.announcement(for: match, mode: .proactive)
+        XCTAssertEqual(spoken?.text, "This is your usual Sourdough.")
+    }
+
+    /// ...and the other loaf on the table must NOT match it. Verbatim from photo b3.
+    func testTheOtherPackageOnTheTableIsStillADifferentProduct() {
+        var catalog = ProductCatalog()
+        catalog.save(seattleSourdough)
+
+        let text = PackageText(lines: [
+            line("EXTRA CRISP", height: 0.9),
+            line("ENGLISH MUFFINS", height: 0.7),
+            line("Jung", height: 0.4),
+        ])
+
+        guard case .differentProduct = ProductTextMatcher.match(
+            text, against: catalog, category: "bread"
+        ) else {
+            return XCTFail("English muffins are not Seattle Sourdough")
+        }
+    }
+
+    /// Narration repeats forever unless something can tell "same conclusion" from "new conclusion".
+    /// OCR jitter means the payload differs every frame — "Juang", "Juanz", "Jung" — so identity
+    /// has to come from the CONCLUSION, not from the text that produced it.
+    func testTheSameConclusionKeepsItsIdentityThroughOCRJitter() {
+        var catalog = ProductCatalog()
+        catalog.save(seattleSourdough)
+
+        let first = ProductTextMatcher.match(
+            PackageText(lines: [line("EXTRA CRISP", height: 0.9), line("Juang", height: 0.5)]),
+            against: catalog, category: "bread")
+        let second = ProductTextMatcher.match(
+            PackageText(lines: [line("EXTRA CRISP", height: 0.9), line("Juanz", height: 0.5)]),
+            against: catalog, category: "bread")
+
+        XCTAssertNotEqual(first, second, "the payloads genuinely differ")
+        XCTAssertEqual(first.conclusion, second.conclusion, "but the conclusion is the same one")
+
+        let ours = ProductTextMatcher.match(
+            PackageText(lines: [
+                line("WATERFRONT", height: 0.9),
+                line("SOURDOUGH", height: 0.8),
+                line("SEATTLE", height: 0.5),
+                line("BAKING COM", height: 0.4),
+            ]),
+            against: catalog, category: "bread")
+        XCTAssertNotEqual(
+            ours.conclusion, first.conclusion, "finding your loaf IS a new conclusion")
+    }
 }
