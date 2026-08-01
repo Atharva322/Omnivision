@@ -46,7 +46,7 @@ public enum ProductRecognition: Equatable, Sendable {
     case unreadable
 }
 
-public struct ProductCatalog: Equatable, Sendable {
+public struct ProductCatalog: Codable, Equatable, Sendable {
 
     private var savedByCategory: [String: SavedProduct]
     private var stockByBarcode: [String: SavedProduct]

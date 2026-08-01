@@ -30,6 +30,21 @@ public enum Command: Equatable {
     case forgetThem
     /// `Lumen, pause` — halt all capture instantly, no confirmation prompt.
     case pause
+
+    // MARK: - Shop (docs/SHOP_SCREEN_PLAN.md Task 2/4)
+    //
+    // Three more commands, added for the shop path. Deliberately worded to avoid the social
+    // grammar above: "remember this" (social, starts a conversation capture) vs "remember this
+    // one" (shop, saves the product in frame) are one word apart on purpose — the extra word is
+    // what keeps `suffix(after:)` from matching the wrong row. Same reasoning for "who is this"
+    // (social, discreet re-greeting) vs "what is this" (shop, one deliberate product scan).
+
+    /// `Lumen, I'm looking for <category>` — sets the category the shop path is matching against.
+    case lookingFor(category: String)
+    /// `Lumen, what is this` — one deliberate scan. Unlike the proactive loop, always answers.
+    case whatIsThis
+    /// `Lumen, remember this one` — save what is in frame as the preference for the current category.
+    case rememberThisOne
 }
 
 public extension Command {
@@ -46,6 +61,9 @@ public extension Command {
         case .favorite: return "favorite"
         case .forgetThem: return "forgetThem"
         case .pause: return "pause"
+        case .lookingFor: return "lookingFor"
+        case .whatIsThis: return "whatIsThis"
+        case .rememberThisOne: return "rememberThisOne"
         }
     }
 
@@ -54,6 +72,7 @@ public extension Command {
         switch self {
         case .bind(let name): return name
         case .remindMe(let text): return text
+        case .lookingFor(let category): return category
         default: return nil
         }
     }
@@ -71,6 +90,9 @@ public enum CommandPhraseID {
     public static let favorite = "cmd.favorite"
     public static let forgetThem = "cmd.forget_them"
     public static let pause = "cmd.pause"
+    public static let lookingFor = "cmd.looking_for"
+    public static let whatIsThis = "cmd.what_is_this"
+    public static let rememberThisOne = "cmd.remember_this_one"
 }
 
 /// A matched command plus the provenance the event log needs.
