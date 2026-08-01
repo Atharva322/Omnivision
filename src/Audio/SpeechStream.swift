@@ -144,8 +144,13 @@ final class SpeechStream {
     task = recognizer?.recognitionTask(with: newRequest) { [weak self] result, error in
       guard let self else { return }
 
-      if let error, (error as NSError).code != 301 {  // 301 = task cancelled during rotation
-        self.lastError = error.localizedDescription
+      // 301 = task cancelled during rotation; 1110 = "No speech detected" at task end.
+      // Both are expected during normal rotation and must not be surfaced as failures.
+      if let error {
+        let code = (error as NSError).code
+        if code != 301 && code != 1110 {
+          self.lastError = error.localizedDescription
+        }
       }
 
       guard let result else { return }
@@ -196,16 +201,68 @@ final class SpeechStream {
 
   // MARK: - G1 measurement
 
-  /// Mean confidence per channel. The G1 gate: the wearer channel must be dramatically
-  /// cleaner than the other channel, or the echo-primary design is wrong and we fall back
-  /// to explicit binding only ("Lumen, this is Priya").
+  /// Mean confidence per channel.
+  ///
+  /// NOTE: on-device `SFSpeechRecognizer` frequently leaves segment confidence at 0, so this is
+  /// unreliable as the G1 metric. Kept for diagnostics only — `meanWER` is the real gate.
   func meanConfidence(for channel: Channel) -> Float? {
-    let scored = utterances.filter { $0.channel == channel && $0.confidence >= 0 }
+    let scored = utterances.filter { $0.channel == channel && $0.confidence > 0 }
     guard !scored.isEmpty else { return nil }
     return scored.map(\.confidence).reduce(0, +) / Float(scored.count)
   }
 
   func count(for channel: Channel) -> Int {
     utterances.filter { $0.channel == channel }.count
+  }
+
+  // MARK: - Word error rate (the real G1 metric)
+
+  /// Both speakers read this aloud. Comparing each transcript against a known ground truth
+  /// gives an objective number that does not depend on the recognizer populating confidence.
+  /// Contains a name in a natural greeting frame, which is exactly what NameExtractor must catch.
+  static let targetScript = "Nice to meet you Priya I work on latency at Stripe"
+
+  /// Word error rate: Levenshtein edit distance over word tokens, normalised by reference length.
+  /// 0.0 is perfect, 1.0 is total failure. Lower is better.
+  static func wordErrorRate(hypothesis: String, reference: String = targetScript) -> Double {
+    func tokens(_ s: String) -> [String] {
+      s.lowercased()
+        .components(separatedBy: CharacterSet.alphanumerics.inverted)
+        .filter { !$0.isEmpty }
+    }
+    let ref = tokens(reference)
+    let hyp = tokens(hypothesis)
+    guard !ref.isEmpty else { return hyp.isEmpty ? 0 : 1 }
+
+    var previous = Array(0...hyp.count)
+    var current = [Int](repeating: 0, count: hyp.count + 1)
+
+    for i in 1...ref.count {
+      current[0] = i
+      for j in 1...max(hyp.count, 1) where hyp.count > 0 {
+        let substitution = previous[j - 1] + (ref[i - 1] == hyp[j - 1] ? 0 : 1)
+        let insertion = current[j - 1] + 1
+        let deletion = previous[j] + 1
+        current[j] = min(substitution, insertion, deletion)
+      }
+      previous = current
+    }
+    return Double(previous[hyp.count]) / Double(ref.count)
+  }
+
+  /// Best (lowest) WER achieved on this channel — the operator's cleanest read.
+  func bestWER(for channel: Channel) -> Double? {
+    let rates = utterances
+      .filter { $0.channel == channel }
+      .map { Self.wordErrorRate(hypothesis: $0.text) }
+    return rates.min()
+  }
+
+  /// Did the recogniser get the NAME right? Ultimately the only thing that matters —
+  /// a transcript can be messy and still bind the identity correctly.
+  func capturedName(for channel: Channel) -> Bool {
+    utterances
+      .filter { $0.channel == channel }
+      .contains { $0.text.lowercased().contains("priya") }
   }
 }

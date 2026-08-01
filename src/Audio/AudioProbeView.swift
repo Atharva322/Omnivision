@@ -124,9 +124,18 @@ struct AudioProbeView: View {
       }
       .pickerStyle(.segmented)
 
-      Text("Tag who is speaking BEFORE they talk. Say the same sentence from each side.")
-        .font(.system(size: 12))
-        .foregroundStyle(.secondary)
+      VStack(alignment: .leading, spacing: 4) {
+        Text("READ THIS ALOUD — both speakers, same words")
+          .font(.system(size: 11, weight: .bold))
+          .foregroundStyle(.secondary)
+        Text("\u{201C}\(SpeechStream.targetScript)\u{201D}")
+          .font(.system(size: 15, weight: .medium, design: .serif))
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(12)
+      .background(Color.blue.opacity(0.15))
+      .clipShape(RoundedRectangle(cornerRadius: 12))
 
       if !micGranted || !speech.isAuthorized {
         Text("Microphone or speech permission denied — grant both in Settings.")
@@ -140,35 +149,42 @@ struct AudioProbeView: View {
 
   private var measurementCard: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text("G1 GATE — mean recognition confidence")
+      Text("G1 GATE — word error rate (lower is better)")
         .font(.system(size: 12, weight: .bold))
         .foregroundStyle(.secondary)
 
       ForEach(Channel.allCases, id: \.self) { channel in
-        HStack {
+        HStack(spacing: 8) {
           Text(channel.rawValue)
             .font(.system(size: 15, weight: .semibold, design: .monospaced))
+          // Getting the NAME right matters more than overall transcript quality.
+          Image(systemName: speech.capturedName(for: channel) ? "checkmark.seal.fill" : "xmark.seal")
+            .foregroundStyle(speech.capturedName(for: channel) ? .green : .secondary)
+            .font(.system(size: 13))
           Spacer()
           Text("n=\(speech.count(for: channel))")
             .font(.system(size: 13, design: .monospaced))
             .foregroundStyle(.secondary)
-          Text(formatted(speech.meanConfidence(for: channel)))
+          Text(percent(speech.bestWER(for: channel)))
             .font(.system(size: 17, weight: .bold, design: .monospaced))
-            .foregroundStyle(color(for: speech.meanConfidence(for: channel)))
+            .foregroundStyle(werColor(speech.bestWER(for: channel)))
         }
       }
 
+      Text("✓ = the name \u{201C}Priya\u{201D} was captured — the only thing identity binding needs")
+        .font(.system(size: 11))
+        .foregroundStyle(.secondary)
+
       Divider()
 
-      if let wearer = speech.meanConfidence(for: .wearer),
-         let other = speech.meanConfidence(for: .other) {
-        let gap = wearer - other
-        Text(verdict(gap: gap))
+      if let wearer = speech.bestWER(for: .wearer),
+         let other = speech.bestWER(for: .other) {
+        Text(verdict(wearerWER: wearer, otherWER: other))
           .font(.system(size: 14, weight: .semibold))
-          .foregroundStyle(gap > 0.15 ? .green : .orange)
+          .foregroundStyle(.primary)
           .fixedSize(horizontal: false, vertical: true)
       } else {
-        Text("Record utterances tagged as both WEARER and OTHER to get a verdict.")
+        Text("Read the script aloud tagged as both WEARER and OTHER to get a verdict.")
           .font(.system(size: 13))
           .foregroundStyle(.secondary)
       }
@@ -183,22 +199,30 @@ struct AudioProbeView: View {
     .clipShape(RoundedRectangle(cornerRadius: 16))
   }
 
-  private func verdict(gap: Float) -> String {
-    if gap > 0.15 {
-      return "PASS — wearer channel is clearly cleaner (gap \(String(format: "%.2f", gap))). Echo-primary design holds."
+  /// Three possible worlds, and they imply different designs.
+  private func verdict(wearerWER: Double, otherWER: Double) -> String {
+    let bothUsable = wearerWER < 0.4 && otherWER < 0.4
+    if bothUsable {
+      return "BOTH CHANNELS USABLE — beamforming is not blocking the other speaker. Prefer direct self-introduction capture (E2/E3); wearer echo becomes a redundant backup rather than the primary path."
     }
-    return "FAIL — gap is only \(String(format: "%.2f", gap)). Beamforming is not buying us enough. Fall back to explicit binding (\"Lumen, this is Priya\") as the primary path."
+    if wearerWER < otherWER - 0.15 {
+      return "WEARER CLEARLY BETTER — echo-primary design holds as planned. Bind names from what you say, not what they say."
+    }
+    if otherWER < wearerWER - 0.15 {
+      return "OTHER SPEAKER BETTER — unexpected. Capture self-introductions directly and treat wearer echo as backup."
+    }
+    return "NEITHER CHANNEL RELIABLE — fall back to explicit binding (\u{201C}Lumen, this is Priya\u{201D}) as the primary path. It always works and costs one sentence."
   }
 
-  private func formatted(_ value: Float?) -> String {
+  private func percent(_ value: Double?) -> String {
     guard let value else { return "—" }
-    return String(format: "%.2f", value)
+    return String(format: "%.0f%%", value * 100)
   }
 
-  private func color(for value: Float?) -> Color {
+  private func werColor(_ value: Double?) -> Color {
     guard let value else { return .secondary }
-    if value > 0.7 { return .green }
-    if value > 0.4 { return .orange }
+    if value < 0.2 { return .green }
+    if value < 0.4 { return .orange }
     return .red
   }
 

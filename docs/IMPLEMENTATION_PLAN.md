@@ -56,7 +56,10 @@ hear them say it. Every reliability property in this system descends from that i
 ## Global Constraints
 
 - **Device:** Ray-Ban Meta Gen 1 / Gen 2 — no display, audio-only output, legacy camera flow.
-- **Audio:** HFP, **8 kHz mono**, beamformed to wearer. Output is narrowband whenever the mic is open.
+- **Audio:** HFP mono, beamformed to wearer. **MEASURED 2026-07-31: 16,000 Hz, not the 8 kHz Meta's
+  docs state** — wideband speech (mSBC / HFP 1.6), port reported as `RB Meta 04PW`. Double the
+  bandwidth we planned around, and 16 kHz is the native sample rate ASR and speaker-embedding models
+  are trained on. Trust this measurement over the documentation.
 - **Ordering:** HFP must be **fully configured and active before** any DAT stream that needs audio starts.
 - **Session:** `AVAudioSession` category `.playAndRecord`, mode `.default`, options `[.allowBluetooth]`.
 - **No continuous video.** Photo capture on demand only (see Decision D2).
