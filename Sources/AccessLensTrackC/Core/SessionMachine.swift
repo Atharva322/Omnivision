@@ -1,6 +1,6 @@
 import Foundation
 
-public enum SessionState: String, Codable, Equatable, Sendable {
+public enum SessionState: String, Codable, Equatable, Hashable, Sendable {
     case idle
     case capturing
     case binding
