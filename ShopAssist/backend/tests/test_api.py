@@ -168,6 +168,38 @@ def test_ask_uses_last_located_products_as_context(client, monkeypatch):
     assert captured["context"]["visible_products"][0]["name"] == "Oatly Original"
 
 
+def test_ask_uses_client_supplied_product_context_when_given(client, monkeypatch):
+    # docs/SHOP_SCREEN_PLAN.md Task 7: the Swift client does on-device recognition and never
+    # calls /locate, so session["last_products"] is never populated in that flow — it sends what
+    # it currently sees directly instead.
+    captured = {}
+
+    def fake_ask(context, question):
+        captured["context"] = context
+        return "Yes, contains oats."
+
+    monkeypatch.setattr(vision, "ask_about_context", fake_ask)
+    resp = client.post(
+        "/ask",
+        data={
+            "session_id": "s1",
+            "question": "Does this contain oats?",
+            "product_context": "OATLY ORIGINAL\nOat drink\nIngredients: water, oats...",
+        },
+    )
+
+    assert resp.json() == {"answer": "Yes, contains oats."}
+    assert captured["context"]["currently_visible_text"] == "OATLY ORIGINAL\nOat drink\nIngredients: water, oats..."
+
+
+def test_ask_without_product_context_falls_back_to_locate_history(client, monkeypatch):
+    monkeypatch.setattr(vision, "ask_about_context", lambda context, question: "answer")
+    resp = client.post("/ask", data={"session_id": "s1", "question": "anything?"})
+
+    assert resp.status_code == 200
+    # No KeyError, no crash, just an empty history — the curl/manual-testing path still works.
+
+
 def test_sessions_are_isolated_by_session_id(client, monkeypatch):
     client.post("/set_target", data={"session_id": "a", "item": "milk"})
     client.post("/set_target", data={"session_id": "b", "item": "bread"})

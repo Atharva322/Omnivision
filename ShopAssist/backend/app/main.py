@@ -71,10 +71,20 @@ async def locate(session_id: str = Form(...), image: UploadFile = None):
 
 
 @app.post("/ask")
-async def ask(session_id: str = Form(...), question: str = Form(...)):
+async def ask(
+    session_id: str = Form(...),
+    question: str = Form(...),
+    product_context: str = Form(""),
+):
     session = get_session(session_id)
     context = {
         "visible_products": session["last_products"],
         "preferences": session["preferences"],
     }
+    if product_context:
+        # docs/SHOP_SCREEN_PLAN.md Task 7: the Swift client does its own on-device recognition
+        # and never calls /locate, so session["last_products"] is never populated in that flow.
+        # It sends what it currently sees directly instead — raw OCR'd package text, not a
+        # structured product list, since that's what on-device text recognition actually produces.
+        context["currently_visible_text"] = product_context
     return {"answer": vision.ask_about_context(context, question)}

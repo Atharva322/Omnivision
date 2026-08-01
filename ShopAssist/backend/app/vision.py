@@ -91,7 +91,10 @@ For any field you're unsure about, use "unknown"."""
 
 ASK_SYSTEM_PROMPT = (
     "You are a shopping assistant. Answer the user's question based on the products currently in "
-    "view, in one or two short, conversational sentences."
+    "view, in one or two short, conversational sentences. The context may include "
+    "'currently_visible_text' — raw text an on-device scanner read off a package (ingredients, "
+    "nutrition facts, etc). Reason over it directly to answer the question. If the context has "
+    "nothing relevant to the question, say so plainly instead of guessing."
 )
 
 
