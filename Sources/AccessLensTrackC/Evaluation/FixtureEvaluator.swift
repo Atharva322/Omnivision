@@ -45,13 +45,50 @@ public struct EvaluationReport {
     public var dispositionChecks = 0
     public var dispositionMismatches = 0
 
+    // Safety invariants (`expect.mustNotAssert`)
+    public var safetyChecks = 0
+    public var safetyViolations = 0
+
+    /// Per-category counts, so a degradation that costs recall can be told apart from one that
+    /// costs precision. A suite that reports one aggregate number hides exactly the distinction
+    /// this project is built on.
+    public struct CategoryStats {
+        public var total = 0
+        public var namesExpected = 0
+        public var correctNames = 0
+        public var missedNames = 0
+        public var wrongNames = 0
+        public var falseNames = 0
+        public var correctlyRejected = 0
+        public var commandsExpected = 0
+        public var correctCommands = 0
+        public var missedCommands = 0
+        public var falseCommands = 0
+        public var safetyViolations = 0
+
+        /// Names recovered out of names present. Nil when the category asserts no names.
+        public var recall: Double? {
+            guard namesExpected > 0 else { return nil }
+            return Double(correctNames) / Double(namesExpected)
+        }
+    }
+
+    public var byCategory: [String: CategoryStats] = [:]
+
     public var failures: [Failure] = []
 
     public var passed: Bool { failures.isEmpty }
 
-    /// The number the accuracy claim rests on: a name produced where none was warranted, or the
-    /// wrong name produced where one was.
-    public var falseAssertions: Int { falseNameExtractions + incorrectNames }
+    /// The number the accuracy claim rests on: a name produced where none was warranted, the wrong
+    /// name produced where one was, or a safety invariant broken.
+    public var falseAssertions: Int { falseNameExtractions + incorrectNames + safetyViolations }
+
+    mutating func category(_ name: String?, _ mutate: (inout CategoryStats) -> Void) {
+        let key = name ?? "uncategorised"
+        var stats = byCategory[key] ?? CategoryStats()
+        mutate(&stats)
+        byCategory[key] = stats
+    }
 }
 
 public struct FixtureEvaluator {
@@ -82,6 +119,8 @@ public struct FixtureEvaluator {
 
     private func evaluate(_ testCase: FixtureCase, into report: inout EvaluationReport) {
         report.totalExamples += 1
+        let bucket = testCase.category
+        report.category(bucket) { $0.total += 1 }
 
         let utterance = testCase.utterance()
         let expectation = testCase.expect
@@ -94,6 +133,7 @@ public struct FixtureEvaluator {
                 break
             case (nil, .some(let actual)):
                 report.falseCommandTriggers += 1
+                report.category(bucket) { $0.falseCommands += 1 }
                 report.failures.append(.init(
                     caseID: testCase.id, text: testCase.text,
                     reason: "expected no command, got .\(actual.label)"
@@ -101,14 +141,17 @@ public struct FixtureEvaluator {
             case (.some(let expected), nil):
                 report.commandsExpected += 1
                 report.missedCommands += 1
+                report.category(bucket) { $0.commandsExpected += 1; $0.missedCommands += 1 }
                 report.failures.append(.init(
                     caseID: testCase.id, text: testCase.text,
                     reason: "expected command .\(expected), got none"
                 ))
             case (.some(let expected), .some(let actual)):
                 report.commandsExpected += 1
+                report.category(bucket) { $0.commandsExpected += 1 }
                 if actual.label == expected {
                     report.correctCommandDetections += 1
+                    report.category(bucket) { $0.correctCommands += 1 }
                     if let expectedArgument = expectation.argument,
                        actual.argumentText != expectedArgument {
                         report.incorrectCommandArguments += 1
@@ -128,17 +171,37 @@ public struct FixtureEvaluator {
         }
 
         // MARK: Names
-        guard expectation.nameAsserted else { return }
+        guard expectation.checksNames else { return }
 
         let candidates = extractor.candidates(in: utterance)
         let actualNames = candidates.map(\.name)
         let expectedNames = expectation.expectedNames
+        let assessment = EvidenceAssessor.assess(candidates, policy: evidencePolicy)
+
+        // Safety invariant first: it holds regardless of what else the case pins, and a violation
+        // is the failure mode the product cannot survive.
+        if expectation.mustNotAssert == true {
+            report.safetyChecks += 1
+            if assessment.mayAssertName {
+                report.safetyViolations += 1
+                report.category(bucket) { $0.safetyViolations += 1 }
+                report.failures.append(.init(
+                    caseID: testCase.id, text: testCase.text,
+                    reason: "SAFETY: must not assert, but asserted \(actualNames) "
+                        + "as .\(assessment.disposition.label) — \(assessment.rationale)"
+                ))
+            }
+        }
+
+        guard expectation.nameAsserted else { return }
 
         if expectedNames.isEmpty {
             if actualNames.isEmpty {
                 report.rejectedUncertainCases += 1
+                report.category(bucket) { $0.correctlyRejected += 1 }
             } else {
                 report.falseNameExtractions += 1
+                report.category(bucket) { $0.falseNames += 1 }
                 report.failures.append(.init(
                     caseID: testCase.id, text: testCase.text,
                     reason: "expected no name, got \(actualNames)"
@@ -148,8 +211,10 @@ public struct FixtureEvaluator {
         }
 
         report.namesExpected += 1
+        report.category(bucket) { $0.namesExpected += 1 }
         if actualNames.isEmpty {
             report.missedNames += 1
+            report.category(bucket) { $0.missedNames += 1 }
             report.failures.append(.init(
                 caseID: testCase.id, text: testCase.text,
                 reason: "expected \(expectedNames), got none"
@@ -158,6 +223,7 @@ public struct FixtureEvaluator {
         }
         guard Set(actualNames) == Set(expectedNames) else {
             report.incorrectNames += 1
+            report.category(bucket) { $0.wrongNames += 1 }
             report.failures.append(.init(
                 caseID: testCase.id, text: testCase.text,
                 reason: "expected \(expectedNames), got \(actualNames)"
@@ -165,9 +231,9 @@ public struct FixtureEvaluator {
             return
         }
         report.correctNameExtractions += 1
+        report.category(bucket) { $0.correctNames += 1 }
 
         // MARK: Evidence metadata
-        let assessment = EvidenceAssessor.assess(candidates, policy: evidencePolicy)
         let primary = assessment.candidate ?? candidates[0]
 
         if let expectedEvidence = expectation.evidence {
@@ -249,8 +315,30 @@ public extension EvaluationReport {
         lines.append("  template id checks ........... \(templateChecks) (\(templateMismatches) mismatched)")
         lines.append("  disposition checks ........... \(dispositionChecks) (\(dispositionMismatches) mismatched)")
         lines.append("")
-        lines.append("FALSE ASSERTIONS (false + wrong names) ... \(falseAssertions)")
+        lines.append("Safety invariants (mustNotAssert)")
+        lines.append("  checked ...................... \(safetyChecks)")
+        lines.append("  VIOLATED ..................... \(safetyViolations)")
         lines.append("")
+        lines.append("FALSE ASSERTIONS (false + wrong + unsafe) ... \(falseAssertions)")
+        lines.append("")
+
+        if !byCategory.isEmpty {
+            lines.append("Per condition")
+            lines.append("  " + "condition".padding(toLength: 24, withPad: " ", startingAt: 0)
+                         + "    n  found   miss  wrong   rej-ok  UNSAFE")
+            for key in byCategory.keys.sorted() {
+                let stats = byCategory[key]!
+                let recall = stats.recall.map { String(format: " (%.0f%% recall)", $0 * 100) } ?? ""
+                lines.append(
+                    "  " + key.padding(toLength: 24, withPad: " ", startingAt: 0)
+                    + String(format: "%5d %6d %6d %6d %8d %7d",
+                             stats.total, stats.correctNames, stats.missedNames,
+                             stats.wrongNames, stats.correctlyRejected, stats.safetyViolations)
+                    + recall
+                )
+            }
+            lines.append("")
+        }
 
         if failures.isEmpty {
             lines.append("All fixture expectations met.")

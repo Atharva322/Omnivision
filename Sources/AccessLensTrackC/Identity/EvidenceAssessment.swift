@@ -40,9 +40,26 @@ public struct EvidencePolicy {
     /// the beamformer attenuates that channel and the transcript is correspondingly worse.
     public var otherChannelAssertThreshold: Float
 
-    public init(wearerAssertThreshold: Float = 0.45, otherChannelAssertThreshold: Float = 0.55) {
+    /// Multiplier applied when the same name arrives from two or more *independent* frames.
+    ///
+    /// Sized to lift the unfamiliar-name score over `wearerAssertThreshold`
+    /// (0.4275 × 1.30 = 0.556) and no further. It buys back exactly the recall that scoring
+    /// unfamiliar names below the assert line costs, and nothing else.
+    public var corroborationBoost: Float
+
+    /// How many distinct templates must produce a name before it counts as corroborated.
+    public var corroboratingTemplatesRequired: Int
+
+    public init(
+        wearerAssertThreshold: Float = 0.45,
+        otherChannelAssertThreshold: Float = 0.55,
+        corroborationBoost: Float = 1.30,
+        corroboratingTemplatesRequired: Int = 2
+    ) {
         self.wearerAssertThreshold = wearerAssertThreshold
         self.otherChannelAssertThreshold = otherChannelAssertThreshold
+        self.corroborationBoost = corroborationBoost
+        self.corroboratingTemplatesRequired = corroboratingTemplatesRequired
     }
 
     public static let `default` = EvidencePolicy()
@@ -60,19 +77,34 @@ public struct EvidenceAssessment {
     /// Log line explaining the decision, for the `EventLog` and the accuracy claim.
     public let rationale: String
 
+    /// Distinct template IDs that independently produced `candidate.name` over the conversation.
+    /// One entry is the ordinary case; two or more is corroboration.
+    public let corroboratingTemplates: [String]
+
+    /// `candidate.confidence` after the corroboration boost — the number the thresholds were
+    /// actually compared against. Equal to the raw confidence when nothing corroborated it.
+    public let effectiveConfidence: Float
+
     public init(
         candidate: NameCandidate?,
         level: EvidenceLevel?,
         disposition: EvidenceDisposition,
         conflicting: [NameCandidate] = [],
-        rationale: String
+        rationale: String,
+        corroboratingTemplates: [String] = [],
+        effectiveConfidence: Float = 0
     ) {
         self.candidate = candidate
         self.level = level
         self.disposition = disposition
         self.conflicting = conflicting
         self.rationale = rationale
+        self.corroboratingTemplates = corroboratingTemplates
+        self.effectiveConfidence = effectiveConfidence
     }
+
+    /// True when two or more independent frames produced this name.
+    public var isCorroborated: Bool { corroboratingTemplates.count >= 2 }
 
     /// True only when the speech evidence alone justifies stating a name as fact.
     public var mayAssertName: Bool {
@@ -125,24 +157,47 @@ public enum EvidenceAssessor {
 
         let best = atStrongest.max(by: { $0.confidence < $1.confidence })!
 
+        // Corroboration is computed over EVERY usable candidate for this name, not just those at
+        // the strongest rung: a wearer echo and an other-channel self-introduction agreeing is two
+        // microphones converging on the same token, which is the strongest thing short of E0.
+        //
+        // Distinct *templates* is the unit, not a raw count. The same frame heard twice is one
+        // speech act repeated — and if it was an ASR truncation the first time it truncates
+        // identically the second. Two different frames landing on the same token is what makes it
+        // unlikely to be an artefact.
+        let matching = usable.filter { $0.name.lowercased() == best.name.lowercased() }
+        let corroboratingTemplates = Array(Set(matching.map(\.template))).sorted()
+        let corroborated = corroboratingTemplates.count >= policy.corroboratingTemplatesRequired
+        let effective = corroborated
+            ? min(best.confidence * policy.corroborationBoost, 1.0)
+            : best.confidence
+        let corroborationNote = corroborated
+            ? " (corroborated by \(corroboratingTemplates.count) frames: "
+                + corroboratingTemplates.joined(separator: ", ") + ")"
+            : ""
+
         switch strongest {
         case .e0:
             return EvidenceAssessment(
                 candidate: best,
                 level: .e0,
                 disposition: .assert,
-                rationale: "E0 explicit wearer bind — unconditional (D5)"
+                rationale: "E0 explicit wearer bind — unconditional (D5)",
+                corroboratingTemplates: corroboratingTemplates,
+                effectiveConfidence: 1.0
             )
         case .e1:
-            if best.confidence >= policy.wearerAssertThreshold {
+            if effective >= policy.wearerAssertThreshold {
                 return EvidenceAssessment(
                     candidate: best,
                     level: .e1,
                     disposition: .assert,
                     rationale: String(
                         format: "E1 wearer echo %@ at %.2f ≥ %.2f",
-                        best.template, best.confidence, policy.wearerAssertThreshold
-                    )
+                        best.template, effective, policy.wearerAssertThreshold
+                    ) + corroborationNote,
+                    corroboratingTemplates: corroboratingTemplates,
+                    effectiveConfidence: effective
                 )
             }
             return EvidenceAssessment(
@@ -151,20 +206,24 @@ public enum EvidenceAssessor {
                 disposition: .hedge,
                 rationale: String(
                     format: "E1 wearer echo %@ at %.2f < %.2f — hedge, require confirmation",
-                    best.template, best.confidence, policy.wearerAssertThreshold
-                )
+                    best.template, effective, policy.wearerAssertThreshold
+                ) + corroborationNote,
+                corroboratingTemplates: corroboratingTemplates,
+                effectiveConfidence: effective
             )
         case .e2, .e3:
-            if best.confidence >= policy.otherChannelAssertThreshold {
+            if effective >= policy.otherChannelAssertThreshold {
                 return EvidenceAssessment(
                     candidate: best,
                     level: strongest,
                     disposition: .assertIfConfident,
                     rationale: String(
                         format: "%@ other-channel %@ at %.2f ≥ %.2f",
-                        strongest.label, best.template, best.confidence,
+                        strongest.label, best.template, effective,
                         policy.otherChannelAssertThreshold
-                    )
+                    ) + corroborationNote,
+                    corroboratingTemplates: corroboratingTemplates,
+                    effectiveConfidence: effective
                 )
             }
             return EvidenceAssessment(
@@ -173,9 +232,11 @@ public enum EvidenceAssessor {
                 disposition: .hedge,
                 rationale: String(
                     format: "%@ other-channel %@ at %.2f < %.2f — hedge, require confirmation",
-                    strongest.label, best.template, best.confidence,
+                    strongest.label, best.template, effective,
                     policy.otherChannelAssertThreshold
-                )
+                ) + corroborationNote,
+                corroboratingTemplates: corroboratingTemplates,
+                effectiveConfidence: effective
             )
         }
     }

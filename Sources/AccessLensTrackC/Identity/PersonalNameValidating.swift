@@ -169,9 +169,20 @@ public struct PortableNameValidator: PersonalNameValidating {
             return NameValidation(accepted: true, confidence: 0.80, validatorID: validatorID)
         }
         if normalized.count >= minimumUnverifiedLength {
-            // Plausible but unverified: an ordinary word we do not know, or an unusual name. Weak
-            // enough that only a strong template will take it.
-            return NameValidation(accepted: true, confidence: 0.55, validatorID: validatorID)
+            // Plausible but unverified: an unusual name, an ordinary word we do not know — or a
+            // name the recogniser cut in half. Text alone cannot separate those. "nice to meet you
+            // prem" and "nice to meet you adaobi" are the same shape, and only one of them is a
+            // person.
+            //
+            // So this bucket is scored to land BELOW `EvidencePolicy.wearerAssertThreshold` once
+            // the strong-template prior and the post-G1 neutral ASR confidence are applied
+            // (0.95 × 0.50 × 0.90 = 0.4275 < 0.45). The name is still extracted and still offered —
+            // it is simply offered as a question rather than stated as a fact. Confirming one name
+            // costs a sentence; storing a truncated one is unrecoverable and is spoken aloud to
+            // someone who cannot see that it is wrong.
+            //
+            // Raising this above ~0.526 re-arms the truncation assert. `ASRRobustnessTests` pins it.
+            return NameValidation(accepted: true, confidence: 0.50, validatorID: validatorID)
         }
         return .rejected("unrecognised short lowercase token", validatorID: validatorID)
     }

@@ -60,12 +60,36 @@ public enum SpeechTokenizer {
     /// required by a template, because ASR output routinely omits all punctuation.
     private static let clauseSeparators: Set<Character> = [",", ";", ":", "—", "–"]
 
+    /// Non-lexical hesitation sounds that on-device ASR transcribes verbatim.
+    ///
+    /// Dropped before matching so that a wearer who pauses to catch a name — "nice to meet you, uh,
+    /// Priya" — is treated the same as one who does not. Every entry here is a sound with no lexical
+    /// meaning; real words that often *function* as fillers ("like", "well", "so", "right") are
+    /// deliberately absent, because they also appear as ordinary words and inside the name slot they
+    /// are already handled by the denylist.
+    static let fillers: Set<String> = [
+        "um", "umm", "uh", "uhh", "uhm", "er", "err", "erm", "ah", "ahh",
+        "hm", "hmm", "mm", "mmm", "mhm", "eh", "huh"
+    ]
+
     /// Split a transcript into tokens.
     ///
     /// Leading and trailing punctuation, symbols and emoji are trimmed from each token; internal
     /// hyphens and apostrophes are preserved because they occur inside real names. Tokens that trim
     /// away to nothing are dropped.
-    public static func tokenize(_ text: String) -> [SpeechToken] {
+    ///
+    /// Three disfluency repairs are applied by default, because they are properties of *how people
+    /// speak* rather than of any one template, and every matcher wants them:
+    ///
+    ///   • **fillers** — "um", "uh", "er" are removed;
+    ///   • **false-start fragments** — a stub ending in a hyphen ("P-" in "P- Priya") is removed;
+    ///   • **immediate repetitions** — "nice to to meet you" and "priya priya" collapse to one.
+    ///
+    /// Set `repairDisfluencies` to false to see the raw token stream.
+    ///
+    /// - Note: indices are assigned *after* repair, so they stay contiguous and callers may use
+    ///   `token.index` to address the returned array.
+    public static func tokenize(_ text: String, repairDisfluencies: Bool = true) -> [SpeechToken] {
         guard !text.isEmpty else { return [] }
 
         var tokens: [SpeechToken] = []
@@ -91,10 +115,25 @@ public enum SpeechTokenizer {
                 index: tokens.count
             ) else { continue }
 
+            if repairDisfluencies {
+                if fillers.contains(token.normalized) { continue }
+                if isFalseStartFragment(token) { continue }
+                if tokens.last?.normalized == token.normalized { continue }
+            }
+
             tokens.append(token)
         }
 
+        // Indices are assigned from `tokens.count` above, which already skips repaired-away tokens,
+        // so the array is contiguous by construction.
         return tokens
+    }
+
+    /// A restarted word: a stub of one or two letters left hanging on a hyphen, as in "P- Priya" or
+    /// "Mar- Marcus". Length-bounded so that a genuine hyphenated name never matches.
+    private static func isFalseStartFragment(_ token: SpeechToken) -> Bool {
+        guard token.surface.hasSuffix("-") || token.surface.hasSuffix("\u{2013}") else { return false }
+        return token.normalized.count <= 2
     }
 
     private static func makeToken(

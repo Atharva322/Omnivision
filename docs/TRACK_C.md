@@ -5,10 +5,12 @@ wake-word spotting, the command grammar, wearer-echo name extraction, the denyli
 confidence/evidence metadata the ladder consumes. All of it is Foundation-only and builds, runs and
 is tested on Linux.
 
-**Nothing in this document reports a hardware measurement.** No microphone, no glasses, no Bluetooth
-and no Apple framework were exercised. The two Track C measurements the plan gates on — the Hour-1
-wake-word false-trigger test and the G1 wearer-vs-other WER comparison — are still outstanding and
-are described at the bottom.
+**Nothing this package *itself* runs is a hardware measurement.** No microphone, no glasses, no
+Bluetooth and no Apple framework are exercised by `swift test`. Gate **G1 (wearer vs other WER) has
+since been run on the glasses** and its numbers are recorded at the bottom and baked into the
+policy constants; the **Hour-1 wake-word false-trigger test is still outstanding**, along with the
+loud-room half of G1. What is measured and what is not is spelled out under
+"Hardware validation".
 
 ---
 
@@ -21,10 +23,10 @@ are described at the bottom.
 | `NLTagger` overlap validation | `Sources/AccessLensTrackC/Identity/PersonalNameValidating.swift` | **seam defined**; Apple implementation written but never compiled or run |
 | `Resources/name_denylist.json` | `Sources/AccessLensTrackC/Resources/name_denylist.json` | done, 69 hard + 23 ambiguous entries |
 | Evidence metadata E0–E3 | `Sources/AccessLensTrackC/Identity/EvidenceAssessment.swift` | done, tested |
-| Fixture corpus + report | `Fixtures/*.json`, `trackc-eval` | 161 cases, all passing |
+| Fixture corpus + report | `Fixtures/*.json`, `trackc-eval` | 215 cases, all passing |
 | Wake-word false-trigger test | — | **not started — needs the glasses** |
-| Wearer-vs-other WER (G1) | — | **not started — needs the glasses** |
-| `VNFeaturePrintObservation` threshold tuning | `Sources/AccessLensTrackC/Identity/FaceCluster.swift` | implementation present; calibration not started |
+| Wearer-vs-other WER (G1) | — | **done 2026-07-31 (quiet room); loud room outstanding** |
+| `VNFeaturePrintObservation` threshold tuning | `Sources/AccessLensTrackC/Identity/FaceCluster.swift` | measured by Track A; feature prints cannot do face re-ID |
 | Battery / thermal profile | — | **not started — needs the hardware** |
 | Latency budget per stage | — | **not started — needs the Bluetooth path** |
 
@@ -57,16 +59,10 @@ swift run trackc-eval Fixtures
 The last recorded Track C-only result (before later Track A tests were added) was:
 
 ```
-EvidenceAssessmentTests    15 tests   0 failures
-FixtureEvaluationTests      6 tests   0 failures
-LumenCommandParserTests    22 tests   0 failures
-NameDenylistTests          12 tests   0 failures
-NameExtractorTests         33 tests   0 failures
-SpeechTokenizerTests       10 tests   0 failures
-                           98 tests   0 failures
+swift test   243 tests   0 failures      (whole package, Tracks A/C/D together)
 
-trackc-eval: 161 examples · 33/33 commands · 58/58 names · 51 correctly rejected
-             0 false command triggers · 0 false name extractions
+trackc-eval: 215 examples · 37/37 commands · 90/90 names · 63 correctly rejected
+             0 false command triggers · 0 false name extractions · 0 safety violations
 ```
 
 `trackc-eval` exits non-zero on any unmet expectation, so it can gate CI directly.
@@ -145,6 +141,91 @@ EvidenceAssessor.assess(extractor.candidates(in: Utterance(text: "Hey Marcus", c
 // → disposition .hedge, level .e3
 //   "E3 other-channel e3.address at 0.32 < 0.55 — hedge, require confirmation"
 ```
+
+---
+
+## Robustness across speakers, rates and accents
+
+`Fixtures/asr_robustness.json` (54 cases) measures what happens when different people say the same
+sentence. **It is not a voice test.** No audio, microphone or recogniser is involved. What varies
+between two speakers — rate, accent, hesitation, vocal effort — reaches this code only as *text
+damage*, and text damage is what the corpus applies:
+
+| Condition | Text signature | Behaviour |
+|---|---|---|
+| Fast speech | function words elided — "nice **meet** you priya" | binds |
+| Fast speech | words merged — "nicetomeetyou priya" | safe miss |
+| Hesitation | fillers — "nice to meet you **um** priya" | binds |
+| Hesitation | stutters — "nice to **to** meet you" | binds |
+| False start | "**P-** Priya" | binds the completed form |
+| Narrowband 8 kHz | frame corrupted — "**night** to meet you" | safe miss |
+| Narrowband 8 kHz | name respelt — "preeya" | binds as transcribed |
+| Truncation | "nice to meet you **prem**" | **hedges, never asserts** |
+| Crosstalk | "sorry nice to meet you priya so what do you do" | binds |
+
+Three repairs live in `SpeechTokenizer` rather than in any one template, because they are properties
+of how people speak and every matcher wants them: fillers are dropped, false-start stubs (`P-`) are
+dropped, and immediately-repeated tokens collapse. `repairDisfluencies: false` shows the raw stream.
+
+The corpus found five real defects, all now fixed and pinned by `ASRRobustnessTests`:
+
+1. **Truncated names were asserted.** `"nice to meet you prem"` scored 0.470 against a 0.45 threshold
+   and stated "Prem" as fact. This is the one that mattered — see below.
+2. Fillers blocked extraction entirely (0 % recall on that condition, and commands too).
+3. A dropped `to` at speed broke the primary E1 frame.
+4. A repeated name became a two-token name: `"priya priya"` → `"Priya Priya"`.
+5. A false-start stub blocked the name behind it.
+
+### Why truncation forces unfamiliar names to hedge
+
+A clipped name and an unfamiliar one are **textually identical**. `"prem"` (Premila, cut) and
+`"adaobi"` (complete) are both "a plausible token the lexicon does not know". No amount of string
+analysis separates them, so the choice is which error to prefer.
+
+The G1 calibration raised `neutralASRConfidence` to 0.90 for the wearer channel — correct on its own
+terms, since G1 measured 0 % WER there. But `Utterance` still carries no `isFinal` flag, so partial
+hypotheses arrive looking exactly like finals, and that raise pushed truncations over the assert
+line. The two changes were individually sound and jointly unsafe.
+
+The unfamiliar-name bucket now scores 0.50 instead of 0.55, landing at `0.95 × 0.50 × 0.90 = 0.4275`
+— just below the 0.45 assert threshold. Such names are still extracted and still offered; they are
+offered as *"Was that Adaobi?"* rather than stated. Names in the lexicon, and names capitalised
+mid-sentence, still assert outright. Raising that constant above ~0.526 re-arms the bug;
+`ASRRobustnessTests.testTruncatedNamesAreNeverAsserted` fails if anyone does.
+
+This does mean a name outside the 514-entry lexicon costs one confirmation. That asymmetry is real
+and it falls hardest on names the list under-represents. It is still the right trade: a confirmation
+is one sentence, and a wrong name is stored, spoken aloud as fact, and invisible to a wearer who
+cannot see the screen. `"Lumen, this is <name>"` remains the E0 path that binds anything,
+unconditionally.
+
+### Corroboration buys that recall back
+
+`SocialMemoryCoordinator` accumulates candidates across the whole conversation and assesses once at
+binding, so `EvidenceAssessor` can see that two *different* frames landed on the same name:
+
+```
+"nice to meet you adaobi"                       → hedge   (one frame, unverifiable name)
+"nice to meet you adaobi" + "good to see you adaobi"
+                                                → ASSERT  (corroborated by 2 frames)
+```
+
+Distinct **templates** is the unit, not a raw count. The same frame heard twice is one speech act
+repeated, and an ASR truncation truncates identically the second time — so `"nice to meet you
+adaobi"` twice is *not* corroboration. Two different frames converging on the same token is what
+makes an artefact unlikely. The boost (×1.30) is sized to clear `wearerAssertThreshold` and no
+further, and `EvidenceAssessment.effectiveConfidence` / `.corroboratingTemplates` put it in the event
+log rather than hiding it inside the candidate score.
+
+Corroboration **never** changes the evidence rung, and **never** resolves a conflict — two
+corroborated names still ask.
+
+**Known limit.** An unfamiliar name scores 0.50, which only clears a *strong* template. So
+`"thanks adaobi"` produces no candidate at all and cannot corroborate anything: corroborating an
+unfamiliar name needs two strong frames (`nice/good to meet/see you`, `this is`, `how are you`).
+Lowering the medium tier to fix that would widen the false-positive surface of `thanks`, which is
+not worth it. `CorroborationTests.testAMediumFrameCannotCorroborateAnUnfamiliarName` pins the
+behaviour so it is a documented limit rather than a surprise.
 
 ---
 
@@ -235,9 +316,40 @@ using the portable validator.** They will need re-checking once `NLTagger` is in
 
 ---
 
-## Still to be validated on Ray-Ban Meta hardware
+## Hardware validation — what is measured and what is not
 
-Everything below is unstarted and unmeasured. None of it can be faked from text.
+None of this can be faked from text. Two items are now **done** and are recorded here so nobody
+re-runs them or, worse, reads this list and concludes the design is still ungated.
+
+### ✅ G1 — wearer vs other channel WER — RAN 2026-07-31
+
+Measured on real HFP audio against a fixed script, quiet room. The route is **16 kHz wideband, not
+the 8 kHz the Meta documentation claims**:
+
+| distance | 0.3 m | 0.6 m | 1.0 m | 2.0 m |
+|---|---|---|---|---|
+| **wearer** | 0 % | 0 % | 0 % | 0 % |
+| **other** | 55 % | 36 % | 9 % | 64 % |
+
+The wearer row is flat because their mouth sits at a fixed distance from the array however anyone
+else moves. The other speaker is non-monotonic: the forward-facing beam leaves them off-axis up
+close and attenuated far away, so the name is captured only around 1 m.
+
+**The kill-switch gate passes** — wearer ≫ other holds decisively, so the echo-primary design stands
+and the E0-only fallback is not needed. `EvidencePolicy` and `NameExtractionPolicy` are calibrated
+from these numbers, not placeholders. See the header comment in `NameSlotResolver.swift`.
+
+### ✅ Face-cluster distance threshold — measured by Track A
+
+Not Track C's item in the end. Track A measured 36 pairwise distances over 9 photos of 3 people and
+found the same-person and different-person distributions **overlap**, so
+`VNGenerateImageFeaturePrintRequest` cannot do face re-identification at all. Threshold moved from
+22.0 to 0.55 for precision. This weakens the E4 hedge path relative to what the plan assumed — worth
+knowing before the demo, and it does not touch anything Track C owns.
+
+### Still open
+
+
 
 1. **Hour-1 wake-word false-trigger test.** Wear the glasses through ~30 minutes of ordinary
    conversation with capture running and count how many times "Lumen" is spotted when nobody
@@ -247,17 +359,15 @@ Everything below is unstarted and unmeasured. None of it can be faked from text.
    the measured 16 kHz HFP route, and no amount of parser precision addresses that. If it misfires, change the wake word
    immediately; `CommandPolicy.wakeWord` and `acceptedWakeVariants` are the two knobs, and the
    variant set is empty precisely so this test decides what goes in it.
-2. **G1: wearer-channel vs other-channel WER.** Two people talking at 1 m, glasses on, in a quiet
-   room and a loud one. Measure word error rate on each channel separately and report to the team.
-   The entire echo-primary design assumes wearer ≫ other. If it does not hold, fall back to E0-only
-   explicit binding, which always works. Track C's `EvidencePolicy.wearerAssertThreshold` and
-   `otherChannelAssertThreshold` are placeholders until this number exists.
-3. **Name recognition at the measured 16 kHz HFP rate.** How often unusual names survive ASR intact. This is
-   what decides whether the given-name lexicon is a useful signal or a distraction on device.
-4. **`VNFeaturePrintObservation` distance threshold**, with same-person and different-person
-   distance distributions.
-5. **Battery and thermal profile**, and the charging rotation schedule.
-6. **Latency budget per stage**, and where the Bluetooth path costs.
+2. **G1 in a LOUD room.** The measurement above is the quiet-room half. The demo floor is the
+   single largest unknown in the plan, and the other-channel column is the one that will move.
+3. **Name recognition at the measured 16 kHz HFP rate.** How often unusual names survive ASR intact.
+   This is what decides whether the given-name lexicon is a useful signal or a distraction on
+   device, and it is the item that governs how well the product works for people whose names the
+   lexicon does not carry. `Fixtures/asr_robustness.json` covers the *textual* half of this — what
+   damaged transcripts do to extraction — and cannot touch the acoustic half.
+4. **Battery and thermal profile**, and the charging rotation schedule.
+5. **Latency budget per stage**, and where the Bluetooth path costs.
 
 ---
 

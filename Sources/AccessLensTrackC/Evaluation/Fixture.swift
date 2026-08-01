@@ -35,9 +35,13 @@ public struct FixtureCase: Decodable {
         public let evidence: String?
         public let template: String?
         public let disposition: String?
+        /// Safety invariant: whatever else happens, the assessment must not reach `.assert` or
+        /// `.assertIfConfident`. Weaker than pinning a disposition, and the right shape for
+        /// degraded input where hedging and rejecting are both acceptable but asserting is not.
+        public let mustNotAssert: Bool?
 
         private enum CodingKeys: String, CodingKey {
-            case command, argument, name, names, evidence, template, disposition
+            case command, argument, name, names, evidence, template, disposition, mustNotAssert
         }
 
         public init(from decoder: Decoder) throws {
@@ -51,7 +55,11 @@ public struct FixtureCase: Decodable {
             evidence = try container.decodeIfPresent(String.self, forKey: .evidence)
             template = try container.decodeIfPresent(String.self, forKey: .template)
             disposition = try container.decodeIfPresent(String.self, forKey: .disposition)
+            mustNotAssert = try container.decodeIfPresent(Bool.self, forKey: .mustNotAssert)
         }
+
+        /// True when this case asserts anything at all about names.
+        public var checksNames: Bool { nameAsserted || mustNotAssert != nil }
 
         /// Expected names, in the order the extractor should rank them.
         public var expectedNames: [String] {
