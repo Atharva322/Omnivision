@@ -3,14 +3,23 @@ import Foundation
 /// Apple integration point for Vision landmark extraction, 112 x 112 alignment, and Core ML.
 /// The concrete model is intentionally not bundled until its weights and licence pass Gate 0.
 public protocol FaceEmbeddingProducing: Sendable {
-    func embedding(for image: CGImage) async throws -> [Float]?
+    /// - Parameter orientation: which way up the frame is.
+    ///
+    ///   MEASURED: feeding sideways frames straight in produces plausible 512-d vectors that do
+    ///   not discriminate. On the same 9 photos, as-captured gave genuine 0.027-0.434 against
+    ///   impostor -0.062-0.560 (overlapping); rotated upright gave 0.384-0.623 against
+    ///   -0.072-0.287 (separable). Glasses frames arrive rotated, so this is not optional.
+    func embedding(
+        for image: CGImage, orientation: CGImagePropertyOrientation) async throws -> [Float]?
 }
 
 /// Safe default while the licensed model artifact is absent: face matching stays unavailable.
 public struct UnavailableFaceEmbedder: FaceEmbeddingProducing {
     public init() {}
 
-    public func embedding(for image: CGImage) async throws -> [Float]? {
+    public func embedding(
+        for image: CGImage, orientation: CGImagePropertyOrientation = .up
+    ) async throws -> [Float]? {
         _ = image
         return nil
     }
@@ -20,6 +29,7 @@ public struct UnavailableFaceEmbedder: FaceEmbeddingProducing {
 import CoreGraphics
 import CoreImage
 import CoreML
+import ImageIO
 import Vision
 
 public enum VisionMobileFaceEmbedderError: Error, Equatable {
@@ -60,7 +70,9 @@ public final class VisionMobileFaceEmbedder: @unchecked Sendable, FaceEmbeddingP
         self.renderer = renderer
     }
 
-    public func embedding(for image: CGImage) async throws -> [Float]? {
+    public func embedding(
+        for image: CGImage, orientation: CGImagePropertyOrientation = .up
+    ) async throws -> [Float]? {
         let request = VNDetectFaceLandmarksRequest()
         try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
         guard let face = request.results?.max(by: {

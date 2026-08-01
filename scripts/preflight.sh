@@ -34,7 +34,15 @@ if echo "$staged" | grep -qE '^\.build/|^DerivedData/|\.venv/|__pycache__/'; the
   fail=1
 fi
 
-# 3. Real secrets. Deliberately narrow so documentation placeholders like "sk-..." still pass.
+# 3. Restricted model weights. buffalo_sc is non-commercial; committing or redistributing the
+#    .onnx or the converted .mlpackage would breach its licence.
+if echo "$staged" | grep -qE '\.(onnx|mlpackage|mlmodel|mlmodelc)(/|$)'; then
+  echo "BLOCKED: model weights are staged. buffalo_sc is non-commercial and must not be committed."
+  echo "$staged" | grep -E '\.(onnx|mlpackage|mlmodel|mlmodelc)(/|$)' | head -3 | sed 's/^/    /'
+  fail=1
+fi
+
+# 4. Real secrets. Deliberately narrow so documentation placeholders like "sk-..." still pass.
 while IFS= read -r file; do
   [ -f "$file" ] || continue
   if git show ":$file" 2>/dev/null | grep -qE 'sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}'; then

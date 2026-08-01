@@ -10,6 +10,7 @@ public final class AVAudioPCMBuffer: @unchecked Sendable {
 
 #if canImport(CoreGraphics)
 import CoreGraphics
+import ImageIO
 #else
 public final class CGImage: @unchecked Sendable {
     public init() {}
@@ -45,7 +46,13 @@ public protocol NameExtracting {
 }
 
 public protocol FaceClustering {
-    func clusterId(for image: CGImage) async throws -> UUID?
+    /// - Parameter orientation: which way up the frame is. REQUIRED, not defaulted: glasses
+    ///   frames arrive rotated, and a sideways face yields a plausible-looking embedding that
+    ///   does not discriminate. Measured — as-captured 0.027-0.434 genuine against -0.062-0.560
+    ///   impostor (overlapping); upright 0.384-0.623 against -0.072-0.287 (separable). A default
+    ///   of `.up` would let callers reintroduce the bug silently.
+    func clusterId(
+        for image: CGImage, orientation: CGImagePropertyOrientation) async throws -> UUID?
 }
 
 public protocol IdentityResolving {

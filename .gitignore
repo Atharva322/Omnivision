@@ -30,3 +30,6 @@ Sources/AccessLensTrackC/Resources/Models/*.onnx
 
 # macOS
 .DS_Store
+
+# Apple-pipeline calibration harness build products
+Tools/applecalib/.build/

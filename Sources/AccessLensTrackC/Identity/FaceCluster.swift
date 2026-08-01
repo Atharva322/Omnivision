@@ -5,6 +5,7 @@ import Foundation
 // explicit import — otherwise the package does not compile on Apple platforms at all.
 #if canImport(CoreGraphics)
 import CoreGraphics
+import ImageIO
 #endif
 
 public actor FaceCluster: FaceClustering {
@@ -63,8 +64,10 @@ public actor FaceCluster: FaceClustering {
         self.store = try store ?? FaceEmbeddingStore()
     }
 
-    public func clusterId(for image: CGImage) async throws -> UUID? {
-        guard let rawEmbedding = try await embedder.embedding(for: image),
+    public func clusterId(
+        for image: CGImage, orientation: CGImagePropertyOrientation
+    ) async throws -> UUID? {
+        guard let rawEmbedding = try await embedder.embedding(for: image, orientation: orientation),
               let embedding = EmbeddingMatcher.l2Normalized(rawEmbedding) else {
             return nil
         }
