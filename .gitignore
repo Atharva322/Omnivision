@@ -5,3 +5,9 @@ build/
 DerivedData/
 .env
 .env.local
+
+# ShopAssist/backend (Python)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
