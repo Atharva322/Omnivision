@@ -46,7 +46,7 @@ final class ProductTextNarrationTests: XCTestCase {
         XCTAssertFalse(announcement.text.lowercased().contains("your usual"))
     }
 
-    // MARK: - Step 3: .differentProduct names what is held AND what was wanted
+    // MARK: - Step 3: .differentProduct names what is held AND what was wanted — same brand case
 
     func testDifferentProductNamesBothTheFoundAndTheExpectedVariant() throws {
         let announcement = try XCTUnwrap(
@@ -59,15 +59,58 @@ final class ProductTextNarrationTests: XCTestCase {
         XCTAssertEqual(announcement.text, "This is Cinnamon Raisin Remix, not your usual 21 Whole Grains.")
     }
 
-    // MARK: - Step 4: .nothingRecognised — proactive silence, requested honesty
+    /// The other route into `.differentProduct`: a wholly different brand, not just a different
+    /// variant of the same one. Must not drop the brand name — "This is Unsweetened, not your
+    /// usual 21 Whole Grains" would read as another variant of the SAME brand, hiding the fact
+    /// that it's an entirely different product.
+    func testDifferentProductNamesTheFullFoundProductWhenTheBrandItselfDiffers() throws {
+        let announcement = try XCTUnwrap(
+            ShopNarration.announcement(
+                for: .differentProduct(
+                    brand: "Wonder Bread", variant: "Classic White",
+                    expected: davesKillerBread),
+                mode: .proactive))
 
-    func testNothingRecognisedSaysNothingWhenProactive() {
-        XCTAssertNil(ShopNarration.announcement(for: .nothingRecognised, mode: .proactive))
+        XCTAssertEqual(
+            announcement.text,
+            "This is Wonder Bread Classic White, not your usual Dave's Killer Bread 21 Whole Grains.")
     }
 
-    func testNothingRecognisedExplainsItselfWhenAsked() throws {
+    /// Spoken proactively too, not suppressed — a wearer who cannot see packaging cannot tell a
+    /// substitution apart from the real thing by looking, so this is worth interrupting silence
+    /// for, unlike `.noPreferenceSet` / `.nothingLegible` below.
+    func testDifferentProductIsSpokenProactivelyNotOnlyWhenAsked() {
+        XCTAssertNotNil(
+            ShopNarration.announcement(
+                for: .differentProduct(brand: "Wonder Bread", variant: nil, expected: davesKillerBread),
+                mode: .proactive))
+    }
+
+    // MARK: - Step 4a: .noPreferenceSet — distinct from an OCR failure, proactive silence, honest when asked
+
+    func testNoPreferenceSetSaysNothingWhenProactive() {
+        XCTAssertNil(ShopNarration.announcement(for: .noPreferenceSet, mode: .proactive))
+    }
+
+    func testNoPreferenceSetExplainsItselfWhenAsked() throws {
         let announcement = try XCTUnwrap(
-            ShopNarration.announcement(for: .nothingRecognised, mode: .requested))
+            ShopNarration.announcement(for: .noPreferenceSet, mode: .requested))
+
+        // Must not claim an OCR/legibility problem — the actual cause is "nothing saved yet",
+        // and telling the wearer to reposition something sends them chasing a fix that can't work.
+        XCTAssertFalse(announcement.text.lowercased().contains("read"))
+        XCTAssertTrue(announcement.text.lowercased().contains("remember this one"))
+    }
+
+    // MARK: - Step 4b: .nothingLegible — a genuine OCR failure
+
+    func testNothingLegibleSaysNothingWhenProactive() {
+        XCTAssertNil(ShopNarration.announcement(for: .nothingLegible, mode: .proactive))
+    }
+
+    func testNothingLegibleExplainsItselfWhenAsked() throws {
+        let announcement = try XCTUnwrap(
+            ShopNarration.announcement(for: .nothingLegible, mode: .requested))
 
         XCTAssertFalse(announcement.text.isEmpty)
         // Distinct from the barcode path: no aiming instruction, matching the plan's constraint

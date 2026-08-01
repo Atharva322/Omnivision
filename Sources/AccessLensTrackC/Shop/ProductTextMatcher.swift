@@ -15,35 +15,44 @@ public enum ProductMatch: Equatable, Sendable {
     case exact(SavedProduct)
     /// Brand confirmed; variant not legible or not on file. Hedge — never assert which variant.
     case brandOnly(SavedProduct, seenVariant: String?)
-    /// Brand confirmed, but the variant in frame is not the saved one. Names what was actually
-    /// found — the substitution case this whole path exists to catch. Carries `expected` too
-    /// (not just what was found) because narrating "not your usual" requires saying what the
-    /// usual actually is — see docs/SHOP_SCREEN_PLAN.md Task 3's own example: "This is Cinnamon
-    /// Raisin, not your usual 21 Whole Grains."
+    /// Something else entirely is legible in frame — either a different brand altogether, or the
+    /// same brand with a different variant. Both are the substitution case this path exists to
+    /// catch, and both carry `expected` so narration can say what was wanted, not just what
+    /// wasn't. `brand` is `expected.brand` for the same-brand case, or whatever WAS read for the
+    /// different-brand case — narration tells them apart by comparing the two.
     case differentProduct(brand: String, variant: String?, expected: SavedProduct)
-    /// Nothing usable: no preference recorded for this category, or the saved brand is not
-    /// legible anywhere in the recognised text.
-    case nothingRecognised
+    /// No preference recorded for this category at all — there is nothing to compare against.
+    /// Distinct from `nothingLegible` on purpose: this is not an OCR failure, and saying "I can't
+    /// read this" for it is a lie about what the actual problem is.
+    case noPreferenceSet
+    /// A preference exists, but nothing in the frame was legible enough to compare it against.
+    case nothingLegible
 }
 
 public enum ProductTextMatcher {
 
     public static func match(_ text: PackageText, against catalog: ProductCatalog, category: String) -> ProductMatch {
         guard let expected = catalog.saved(inCategory: category) else {
-            // No preference saved for this category — nothing to compare against. Whether to
-            // still identify and announce an unrecognised product is unresolved: see
-            // docs/SHOP_SCREEN_PLAN.md "Ask before you build" #1. Staying on the safe side until
-            // that's answered — never assert or hedge about a baseline that does not exist.
-            return .nothingRecognised
+            return .noPreferenceSet
+        }
+
+        guard !text.lines.isEmpty else {
+            return .nothingLegible
         }
 
         let brandTokens = TextNormalizer.tokens(in: expected.brand)
-        guard !brandTokens.isEmpty else { return .nothingRecognised }
+        guard !brandTokens.isEmpty else { return .nothingLegible }
 
         let lineTokens = text.lines.map { TextNormalizer.tokens(in: $0.text) }
         guard let brandLineIndex = lineTokens.firstIndex(where: { $0 == brandTokens }) else {
-            // Brand itself is not legible anywhere in frame. Nothing to assert or contrast.
-            return .nothingRecognised
+            // The expected brand is not legible anywhere in frame — but something else IS
+            // (the isEmpty guard above already ruled out nothing at all). Rather than give up,
+            // report what was actually found: picking up a different brand entirely is a more
+            // common substitution than a different variant of the same one, and it is exactly
+            // the failure this path exists to catch.
+            let foundBrand = text.mostProminent ?? "something"
+            let foundVariant = text.lines.count > 1 ? text.lines[1].text : nil
+            return .differentProduct(brand: foundBrand, variant: foundVariant, expected: expected)
         }
 
         guard let expectedVariant = expected.variant, !expectedVariant.isEmpty else {

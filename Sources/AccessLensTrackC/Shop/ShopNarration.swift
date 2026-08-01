@@ -122,12 +122,23 @@ public enum ShopNarration {
                 dedupeKey: "text:brandOnly:\(product.category)",
                 at: time)
 
-        case .differentProduct(_, let variant, let expected):
-            // Brand matches; the variant does not. Name what was actually found AND what was
-            // wanted — "not your usual" alone leaves the wearer with a product and no idea what
-            // it is, the same reasoning as the barcode path's `notYourUsual`.
-            let found = variant ?? "something else"
-            let usual = expected.variant ?? expected.brand
+        case .differentProduct(let brand, let variant, let expected):
+            // Name what was actually found AND what was wanted — "not your usual" alone leaves
+            // the wearer with a product and no idea what it is, the same reasoning as the
+            // barcode path's `notYourUsual`. Spoken in BOTH proactive and requested modes,
+            // deliberately: a wearer who cannot see packaging cannot tell a substitution apart
+            // from the real thing by looking, so this is worth interrupting silence for, the same
+            // as a genuine match is.
+            //
+            // Two different situations share this case (same brand/wrong variant, vs a wholly
+            // different brand) and need different phrasing. Compare against `expected.brand`
+            // rather than carrying a separate flag, since the matcher already puts the right
+            // value in `brand` for each case.
+            let sameBrand = TextNormalizer.tokens(in: brand) == TextNormalizer.tokens(in: expected.brand)
+            let found = sameBrand
+                ? (variant ?? "something else")
+                : [brand, variant].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+            let usual = sameBrand ? (expected.variant ?? expected.brand) : expected.label
             return Announcement(
                 text: "This is \(found), not your usual \(usual).",
                 source: .product,
@@ -135,16 +146,28 @@ public enum ShopNarration {
                 dedupeKey: "text:different:\(expected.category):\(found)",
                 at: time)
 
-        case .nothingRecognised:
+        case .noPreferenceSet:
             guard mode == .requested else { return nil }
-            // Actionable, and distinct from the barcode path's wording — there is no "aim at the
-            // barcode" instruction here, because the whole point of the text path is that the
-            // wearer never has to aim at anything.
+            // Distinct from `.nothingLegible` on purpose — this is not an OCR failure, and
+            // telling the wearer to reposition something when the real problem is "you never
+            // told me what to look for" sends them chasing a fix that cannot work.
             return Announcement(
-                text: "I can't read this. Try turning the label toward the camera.",
+                text: "I don't know what your usual one looks like yet. Say \"remember this one\" to save one.",
                 source: .product,
                 priority: .normal,
-                dedupeKey: "text:nothingRecognised",
+                dedupeKey: "text:noPreferenceSet",
+                at: time)
+
+        case .nothingLegible:
+            guard mode == .requested else { return nil }
+            // Distinct from the barcode path's wording — no "aim at the barcode" instruction
+            // here, because the whole point of the text path is that the wearer never has to aim
+            // at anything. This is a genuine legibility problem, so "hold it steadier" is honest.
+            return Announcement(
+                text: "I can't read anything here. Try holding it steadier.",
+                source: .product,
+                priority: .normal,
+                dedupeKey: "text:nothingLegible",
                 at: time)
         }
     }
