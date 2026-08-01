@@ -44,11 +44,24 @@ final class OmnivisionSession {
 
     let narrator = Narrator()
 
+    init() {
+        let url = URL.applicationSupportDirectory.appending(path: "omnivision-people.json")
+        // A failed store must not take the whole session down — degrade to a temporary one so the
+        // wearer still gets recognition for this session rather than a dead app.
+        store = (try? PersonStore(url: url))
+            ?? (try! PersonStore(url: URL.temporaryDirectory.appending(path: "people.json")))
+    }
+
     private let spine = AudioSpine()
     private let speech = SpeechStream()
     private let commands = LumenCommandParser()
     private let extractor = NameExtractor(validator: CorroboratedNameValidator.platformDefault())
-    private var store: [Person] = []
+    /// The real store: persisted, encounter-counted, tier-aware.
+    ///
+    /// This was an in-memory `[Person]` array, which is why nothing was ever "someone I already
+    /// know" — encounters could not accumulate across launches, so every meeting was a first
+    /// meeting and every person stayed at `.newPerson` forever.
+    private let store: PersonStore
     private var gate = AnnouncementGate()
     private var shop: ShopScanner?
 
@@ -123,7 +136,8 @@ final class OmnivisionSession {
             return
         }
 
-        let state = IdentityResolver(people: store).resolve(names: candidates, cluster: nil)
+        let known = await store.allPersons()
+        let state = IdentityResolver(people: known).resolve(names: candidates, cluster: nil)
         await announce(state, heard: utterance.text)
     }
 
@@ -142,20 +156,37 @@ final class OmnivisionSession {
         case .bind(let name):
             let candidate = NameCandidate(
                 name: name, channel: .wearer, template: "e0.explicit_bind", confidence: 1.0)
-            let state = IdentityResolver(people: store).resolve(names: [candidate], cluster: nil)
+            let known = await store.allPersons()
+            let state = IdentityResolver(people: known).resolve(names: [candidate], cluster: nil)
             await announce(state, heard: utterance.text)
 
         case .whoIsThis:
             // Explicit request: always answer, even to say we do not know.
-            if let last = store.last {
-                say(Narrator.line(for: last), priority: .discreet, kind: "who is this")
+            if let last = await store.allPersons().last {
+                say(greeting(for: last), priority: .discreet, kind: "who is this")
             } else {
                 say("I don't know who this is.", priority: .discreet, kind: "who is this")
             }
 
+        case .favorite:
+            // You see the barista daily and your sister monthly. Frequency cannot infer importance,
+            // so an explicit designation always wins over the automatic tier.
+            if let last = await store.allPersons().last {
+                do {
+                    let updated = try await store.setManualTierOverride(.inner, for: last.id)
+                    say("\(updated.name) is now a favourite.", priority: .normal, kind: "favourite")
+                } catch { lastError = error.localizedDescription }
+            } else {
+                say("I don't know who to favourite.", priority: .normal, kind: "favourite")
+            }
+
         case .forgetThem:
-            let removed = store.popLast()?.name ?? "nobody"
-            say("Forgotten \(removed).", priority: .normal, kind: "forget")
+            if let last = await store.allPersons().last,
+               let removed = try? await store.delete(id: last.id) {
+                say("Forgotten \(removed.name).", priority: .normal, kind: "forget")
+            } else {
+                say("There's nobody to forget.", priority: .normal, kind: "forget")
+            }
 
         default:
             log("command", String(describing: command), spoken: nil)
@@ -165,8 +196,12 @@ final class OmnivisionSession {
     private func announce(_ state: IdentityState, heard: String) async {
         switch state {
         case .known(let person):
-            remember(person)
-            say(Narrator.line(for: person), priority: .normal, kind: "ASSERT", heard: heard)
+            // Persist FIRST, then narrate — the stored person carries the real encounter count and
+            // tier, and it is the tier that decides how much gets said.
+            let stored = await remember(person)
+            let line = greeting(for: stored)
+            say(line, priority: .normal,
+                kind: "ASSERT · \(stored.effectiveTier) ×\(stored.encounterCount)", heard: heard)
 
         case .likely(let person):
             // Never phrased as a fact — this is the hedge the accuracy claim depends on.
@@ -181,17 +216,36 @@ final class OmnivisionSession {
         }
     }
 
-    private func remember(_ person: Person) {
-        if let index = store.firstIndex(where: {
-            $0.name.caseInsensitiveCompare(person.name) == .orderedSame
-        }) {
-            var updated = store[index]
-            updated.encounterCount += 1
-            updated.lastEncounterAt = Date()
-            updated.tier = Person.autoTier(for: updated.encounterCount)
-            store[index] = updated
-        } else {
-            store.append(person)
+    /// Records the encounter and returns the person as stored, with an up-to-date count and tier.
+    @discardableResult
+    private func remember(_ person: Person) async -> Person {
+        do {
+            if let existing = await store.find(name: person.name) {
+                return try await store.registerEncounter(for: existing.id, at: Date())
+            }
+            return try await store.bind(name: person.name, org: person.org)
+        } catch {
+            lastError = error.localizedDescription
+            return person
+        }
+    }
+
+    /// Verbosity is inversely proportional to familiarity. Reading a full card to someone you see
+    /// daily is insulting; a stranger needs everything.
+    private func greeting(for person: Person) -> String {
+        switch person.effectiveTier {
+        case .inner:
+            // Nearly nothing. A pending note if there is one, otherwise just the name.
+            return person.pendingNotes.first ?? person.name
+        case .familiar:
+            return person.name
+        case .acquaintance:
+            let when = person.lastEncounterAt.map {
+                HumanTimeFormatter().string(since: $0)
+            }
+            return [person.name, person.org, when].compactMap { $0 }.joined(separator: ", ")
+        case .newPerson:
+            return "\(person.name). Saved."
         }
     }
 
