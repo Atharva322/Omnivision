@@ -1,0 +1,11 @@
+{
+  "demo1": {
+    "milk": {
+      "brand": "Trader Joe's",
+      "variant": "Reduced Fat",
+      "attributes": {
+        "low_fat": true
+      }
+    }
+  }
+}

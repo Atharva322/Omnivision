@@ -15,3 +15,8 @@ Package.resolved
 
 # Private notes — never committed
 notes/
+# ShopAssist/backend (Python)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
