@@ -54,6 +54,10 @@ final class ShopSession {
     private(set) var silenceRequested = false
     private var lastOtherSpeechAt: Date?
     private var lastFrame: CapturedFrame?
+    /// What the camera is ACTUALLY doing, not what was successfully constructed.
+    private(set) var cameraStatus = "off"
+    private(set) var framesReceived = 0
+    private var cameraWatchdog: Task<Void, Never>?
 
     let narrator = Narrator()
 
@@ -72,7 +76,22 @@ final class ShopSession {
     /// Base URL of the Python backend (ShopAssist/backend), e.g. an ngrok URL during a demo.
     /// Nobody has decided how this gets configured for a real run — hardcode, a settings screen,
     /// whatever's fastest — this default is a localhost placeholder, not a real answer.
-    var backendBaseURL = URL(string: "http://localhost:8000")!
+    /// Where the shop backend lives.
+    ///
+    /// NOT localhost — on the phone that means the phone, so every `/ask` would fail with nothing
+    /// but "I can't reach the network for that one" to show for it. Resolves the Mac by its Bonjour
+    /// name, which survives the DHCP lease changing between now and the demo where a hardcoded IP
+    /// would not. Port 8010 because 8000 is taken by an unrelated backend on that machine.
+    ///
+    /// Override without rebuilding, e.g. if the venue blocks mDNS:
+    ///     defaults write <app-domain> OmnivisionBackendURL "http://10.0.0.5:8010"
+    var backendBaseURL: URL = {
+        if let override = UserDefaults.standard.string(forKey: "OmnivisionBackendURL"),
+           let url = URL(string: override) {
+            return url
+        }
+        return URL(string: "http://MacBook-Pro-629.local:8010")!
+    }()
 
     private var audioTask: Task<Void, Never>?
     private var utteranceTask: Task<Void, Never>?
@@ -92,12 +111,17 @@ final class ShopSession {
 
     // MARK: - Lifecycle
 
-    /// - Parameter listenForFrames: bridges the DAT camera publisher, exactly like
-    ///   `OmnivisionSession`'s counterpart for audio — injected rather than referenced directly so
-    ///   this stays usable with MockDeviceKit. **Nobody has wired a real DAT stream into this
-    ///   repo yet** (see RED_FLAGS.md #1-2); whoever connects this to the actual glasses camera
-    ///   supplies this closure from wherever that session lives.
+    /// - Parameters:
+    ///   - startCamera: brings the DAT camera stream up, returning an error message on failure.
+    ///     Subscribing is not the same as starting: this view only ever subscribed, so it received
+    ///     frames solely if something else had already begun streaming — which nothing had.
+    ///   - listenForFrames: bridges the DAT camera publisher. Injected rather than referenced
+    ///     directly so this stays usable with MockDeviceKit.
+    ///
+    /// The error is surfaced HERE rather than only in the host app, whose alert sits underneath
+    /// this screen where a blind wearer will never find it.
     func start(
+        startCamera: (() async -> String?)? = nil,
         listenForFrames: @escaping (@escaping (UIImage) -> Void) -> Any
     ) async {
         guard !isRunning else { return }
@@ -138,6 +162,13 @@ final class ShopSession {
             }
         }
 
+        // Camera after HFP. Meta documents that ordering, and reversing it costs the audio.
+        if let cameraError = await startCamera?() ?? nil {
+            cameraStatus = "camera failed"
+            lastError = "Camera did not start: \(cameraError)"
+            log("camera", "camera did not start: \(cameraError)", spoken: nil)
+        }
+
         let (frames, cancel) = FrameBridge.stream(listen: listenForFrames)
         cancelFrames = cancel
         frameTask = Task { [weak self] in
@@ -145,12 +176,23 @@ final class ShopSession {
             await self.consume(frames)
         }
 
+        // A subscription is not a stream. Without this, "scanned 0" is indistinguishable from a
+        // wearer who simply has not pointed at anything yet — and the wearer cannot see either.
+        cameraWatchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard let self, !Task.isCancelled, self.framesReceived == 0 else { return }
+            self.cameraStatus = "no camera frames"
+            self.narrator.say("The camera isn't sending anything.", priority: .critical)
+            self.log("camera", "no frames in 8 seconds — scanning is not running", spoken: nil)
+        }
+
         narrator.play(.captureOn)
     }
 
     func stop() {
-        audioTask?.cancel(); utteranceTask?.cancel(); frameTask?.cancel()
-        audioTask = nil; utteranceTask = nil; frameTask = nil
+        audioTask?.cancel(); utteranceTask?.cancel(); frameTask?.cancel(); cameraWatchdog?.cancel()
+        audioTask = nil; utteranceTask = nil; frameTask = nil; cameraWatchdog = nil
+        cameraStatus = "off"
         cancelFrames?(); cancelFrames = nil
         speech.stop(); spine.stop()
         isRunning = false
@@ -215,6 +257,8 @@ final class ShopSession {
 
     private func consume(_ frames: AsyncStream<CapturedFrame>) async {
         for await frame in frames {
+            framesReceived += 1
+            if cameraStatus != "camera on" { cameraStatus = "camera on" }
             lastFrame = frame
             guard !isScanning else {
                 framesDropped += 1
@@ -406,6 +450,8 @@ struct ShopView: View {
     /// Supplies the real DAT camera subscription. See `ShopSession.start(listenForFrames:)` — this
     /// is a placeholder until whoever owns the DAT session (Track B) wires the real one in.
     var listenForFrames: (@escaping (UIImage) -> Void) -> Any = { _ in () }
+    /// Brings the glasses camera up. Without it this screen subscribes to a stream nobody started.
+    var startCamera: (() async -> String?)?
 
     var body: some View {
         NavigationStack {
@@ -448,7 +494,8 @@ struct ShopView: View {
                     if session.isRunning {
                         session.stop()
                     } else {
-                        await session.start(listenForFrames: listenForFrames)
+                        await session.start(
+                            startCamera: startCamera, listenForFrames: listenForFrames)
                     }
                 }
             }
@@ -464,7 +511,7 @@ struct ShopView: View {
                 Text(session.targetCategory.map { "Looking for: \($0)" } ?? "Say what you're looking for")
                     .font(.system(size: 12, weight: .medium))
                 Spacer()
-                Text("scanned \(session.framesScanned) · dropped \(session.framesDropped)")
+                Text("\(session.cameraStatus) · \(session.framesReceived)f · scanned \(session.framesScanned)")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(.secondary)
             }

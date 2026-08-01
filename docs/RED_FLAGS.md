@@ -297,6 +297,57 @@ Verify the **specific** change, not a substring that other code also satisfies.
 
 ---
 
+## Shop assist — five reasons it could never have worked, 2026-08-01
+
+Found while making the shop track testable on device. All five are "written, tested, and unreachable"
+— the unit tests passed throughout because they exercise the pure types, and every one of these
+failures lives in the wiring the tests do not touch.
+
+### 27. ShopView was never in the Xcode target
+
+519 lines, marked UNVERIFIED by its author because they had no Mac. It had never been **compiled**,
+let alone run — the file existed in `src/` and in the app folder, but was not a member of the
+CameraAccess target, so no build ever included it and no button ever opened it.
+
+It compiles clean now, and `nm` confirms 23 ShopView symbols in the shipped binary. Credit where due:
+519 lines written without a compiler, and it built without a single error.
+
+### 28. ShopView subscribed to the camera but never started it
+
+Identical to #18 in the social path, and present even after that fix: `start(listenForFrames:)` only
+ever attached an observer. Nothing called `handleStartStreaming`, so frames arrived solely if
+something else had already begun streaming — which nothing had. `scanned 0` forever.
+
+Now takes `startCamera`, plus the same 8-second watchdog, `camera on`/`no camera frames` status, and
+a spoken "The camera isn't sending anything" so a blind wearer learns it without a screen.
+
+### 29. `localhost:8000` on the phone means the phone
+
+`backendBaseURL` pointed at `http://localhost:8000`. On device that resolves to the **iPhone**, so
+every `/ask` would have failed and said only *"I can't reach the network for that one"* — a message
+indistinguishable from real network trouble.
+
+Now the Mac's Bonjour name, which survives the DHCP lease changing before the demo where a hardcoded
+IP would not, with a `OmnivisionBackendURL` UserDefaults override for venues that block mDNS.
+
+### 30. App Transport Security would have blocked it anyway
+
+Even pointed at the right host, plain HTTP to a LAN address is refused by default. There was no
+`NSAppTransportSecurity` key at all. Added `NSAllowsLocalNetworking`.
+(`NSLocalNetworkUsageDescription` was already present, for the glasses.)
+
+### 31. Port 8000 belongs to something else
+
+`curl localhost:8000/health` returned 200 — from `interlock.api.main`, an unrelated project running
+on the same Mac. It looked exactly like a healthy ShopAssist backend and was not one. ShopAssist has
+no `/health` route at all. Moved to **8010**, bound to `0.0.0.0` rather than `127.0.0.1` so the phone
+can reach it, and verified over both the LAN IP and the Bonjour name.
+
+`/ask` is confirmed working end to end against the real OpenAI key — and it hedged rather than
+inventing an answer it could not read off the package.
+
+---
+
 ## LOW — cleanup, but permanent if ignored
 
 ### 14. 15 MB of JPEGs are in git
