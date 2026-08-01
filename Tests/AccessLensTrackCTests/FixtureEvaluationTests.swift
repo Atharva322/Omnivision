@@ -18,8 +18,8 @@ final class FixtureEvaluationTests: XCTestCase {
     func testFixturesArePresentAndWellFormed() throws {
         let suites = try loadSuites()
         XCTAssertEqual(
-            Set(suites.map(\.name)), ["adversarial", "commands", "names"],
-            "expected the three fixture suites in \(fixturesDirectory.path)"
+            Set(suites.map(\.name)), ["adversarial", "asr_robustness", "commands", "names"],
+            "expected the four fixture suites in \(fixturesDirectory.path)"
         )
         for suite in suites {
             XCTAssertFalse(suite.cases.isEmpty, "\(suite.name) is empty")

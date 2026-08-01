@@ -105,12 +105,20 @@ public extension NameTemplate {
         NameTemplate(
             id: NameTemplateID.niceToMeetOrSeeYou,
             level: .e1, strength: .strong, shape: .nameFollowsLead, prior: 0.95,
-            phrases: [["nice", "to", "meet", "you"], ["nice", "to", "see", "you"]]
+            phrases: [
+                ["nice", "to", "meet", "you"], ["nice", "to", "see", "you"],
+                // Fast speech swallows the infinitive "to". Measured as the most common elision in
+                // this frame; the remaining three words are specific enough to carry the match.
+                ["nice", "meet", "you"], ["nice", "see", "you"]
+            ]
         ),
         NameTemplate(
             id: NameTemplateID.goodToMeetOrSeeYou,
             level: .e1, strength: .strong, shape: .nameFollowsLead, prior: 0.95,
-            phrases: [["good", "to", "meet", "you"], ["good", "to", "see", "you"]]
+            phrases: [
+                ["good", "to", "meet", "you"], ["good", "to", "see", "you"],
+                ["good", "meet", "you"], ["good", "see", "you"]
+            ]
         ),
         NameTemplate(
             id: NameTemplateID.howAreYou,

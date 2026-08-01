@@ -56,8 +56,66 @@ final class SpeechTokenizerTests: XCTestCase {
     }
 
     func testTokenCountIsBounded() {
-        let tokens = SpeechTokenizer.tokenize(String(repeating: "word ", count: 5000))
-        XCTAssertEqual(tokens.count, SpeechTokenizer.maxTokens)
+        // Distinct tokens, because identical adjacent ones now collapse as a stutter repair.
+        let text = (0..<5000).map { "word\($0)" }.joined(separator: " ")
+        XCTAssertEqual(SpeechTokenizer.tokenize(text).count, SpeechTokenizer.maxTokens)
+    }
+
+    // MARK: - Disfluency repair
+
+    func testFillersAreRemoved() {
+        XCTAssertEqual(
+            SpeechTokenizer.tokenize("nice to meet you um Priya").map(\.surface),
+            ["nice", "to", "meet", "you", "Priya"]
+        )
+        XCTAssertEqual(
+            SpeechTokenizer.tokenize("nice to meet you, uh, Priya").map(\.surface),
+            ["nice", "to", "meet", "you", "Priya"]
+        )
+    }
+
+    func testWordsThatMerelyFunctionAsFillersAreKept() {
+        // "like", "well", "so" and "right" are ordinary words; removing them would change meaning.
+        XCTAssertEqual(
+            SpeechTokenizer.tokenize("well so like right").map(\.surface),
+            ["well", "so", "like", "right"]
+        )
+    }
+
+    func testImmediateRepetitionsCollapse() {
+        XCTAssertEqual(
+            SpeechTokenizer.tokenize("nice to to meet you").map(\.surface),
+            ["nice", "to", "meet", "you"]
+        )
+        XCTAssertEqual(SpeechTokenizer.tokenize("Priya Priya").map(\.surface), ["Priya"])
+        XCTAssertEqual(
+            SpeechTokenizer.tokenize("Priya and Marcus").map(\.surface),
+            ["Priya", "and", "Marcus"],
+            "only *adjacent* duplicates collapse"
+        )
+    }
+
+    func testFalseStartFragmentsAreRemoved() {
+        XCTAssertEqual(SpeechTokenizer.tokenize("P- Priya").map(\.surface), ["Priya"])
+        XCTAssertEqual(SpeechTokenizer.tokenize("Ma- Marcus").map(\.surface), ["Marcus"])
+    }
+
+    func testHyphenatedNamesAreNotMistakenForFragments() {
+        XCTAssertEqual(SpeechTokenizer.tokenize("Jean-Luc").map(\.surface), ["Jean-Luc"])
+        XCTAssertEqual(SpeechTokenizer.tokenize("Anne-Marie").map(\.surface), ["Anne-Marie"])
+    }
+
+    func testRepairCanBeDisabledForInspection() {
+        XCTAssertEqual(
+            SpeechTokenizer.tokenize("nice to to meet you um Priya", repairDisfluencies: false)
+                .map(\.surface),
+            ["nice", "to", "to", "meet", "you", "um", "Priya"]
+        )
+    }
+
+    func testIndicesStayContiguousAfterRepair() {
+        let tokens = SpeechTokenizer.tokenize("um nice to to meet you uh Priya")
+        XCTAssertEqual(tokens.map(\.index), Array(0..<tokens.count))
     }
 
     func testVerbatimSliceOfTheOriginalTranscript() {
