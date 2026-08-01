@@ -1,0 +1,60 @@
+{
+  "name": "names",
+  "description": "Wearer-echo templates (E1), explicit binds (E0) and other-channel evidence (E2/E3) that SHOULD produce a name. Text-only: these measure the extractor, not the microphone. Default channel is 'wearer' and default confidence 0.9.",
+  "cases": [
+    { "id": "nm-001", "category": "clean", "text": "Nice to meet you, Priya", "expect": { "name": "Priya", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-002", "category": "asr-lowercase", "text": "nice to meet you priya", "expect": { "name": "Priya", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-003", "category": "punctuation", "text": "Nice to meet you Priya!", "expect": { "name": "Priya", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-004", "category": "casing", "text": "NICE TO MEET YOU, PRIYA", "expect": { "name": "Priya", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-005", "category": "clean", "text": "Nice to see you, Siobhan", "expect": { "name": "Siobhan", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+
+    { "id": "nm-010", "category": "clean", "text": "Good to see you Marcus", "expect": { "name": "Marcus", "evidence": "E1", "template": "e1.good_to_meet_or_see_you" } },
+    { "id": "nm-011", "category": "asr-lowercase", "text": "good to see you marcus", "expect": { "name": "Marcus", "evidence": "E1", "template": "e1.good_to_meet_or_see_you" } },
+    { "id": "nm-012", "category": "clean", "text": "Good to meet you, Aisha", "expect": { "name": "Aisha", "evidence": "E1", "template": "e1.good_to_meet_or_see_you" } },
+
+    { "id": "nm-020", "category": "clean", "text": "Thanks, Daniel", "expect": { "name": "Daniel", "evidence": "E1", "template": "e1.thanks" } },
+    { "id": "nm-021", "category": "asr-lowercase", "text": "thanks daniel", "expect": { "name": "Daniel", "evidence": "E1", "template": "e1.thanks" } },
+    { "id": "nm-022", "category": "clean", "text": "Thank you, Yuki", "expect": { "name": "Yuki", "evidence": "E1", "template": "e1.thanks" } },
+    { "id": "nm-023", "category": "two-token-name", "text": "Thanks, Mary Beth", "expect": { "name": "Mary Beth", "evidence": "E1", "template": "e1.thanks" } },
+
+    { "id": "nm-030", "category": "trailing-template", "text": "Priya, great talking to you", "expect": { "name": "Priya", "evidence": "E1", "template": "e1.name_leading" } },
+    { "id": "nm-031", "category": "trailing-template", "text": "Marcus, good to see you", "expect": { "name": "Marcus", "evidence": "E1", "template": "e1.name_leading" } },
+    { "id": "nm-032", "category": "trailing-template", "text": "Fatima, how have you been", "expect": { "name": "Fatima", "evidence": "E1", "template": "e1.name_leading" } },
+
+    { "id": "nm-040", "category": "greeting", "text": "Hi, Marcus", "expect": { "name": "Marcus", "evidence": "E1", "template": "e1.greeting" } },
+    { "id": "nm-041", "category": "greeting", "text": "hey priya", "expect": { "name": "Priya", "evidence": "E1", "template": "e1.greeting" } },
+    { "id": "nm-042", "category": "greeting", "text": "Hello, Kwame", "expect": { "name": "Kwame", "evidence": "E1", "template": "e1.greeting" } },
+    { "id": "nm-043", "category": "greeting", "text": "Morning, Ingrid", "expect": { "name": "Ingrid", "evidence": "E1", "template": "e1.greeting" } },
+    { "id": "nm-044", "category": "greeting", "text": "Good morning, Ingrid", "note": "'good morning' alone binds nothing; with a name after it, the greeting template applies.", "expect": { "name": "Ingrid", "evidence": "E1", "template": "e1.greeting" } },
+
+    { "id": "nm-050", "category": "farewell", "text": "Bye, Sofia", "expect": { "name": "Sofia", "evidence": "E1", "template": "e1.farewell" } },
+    { "id": "nm-051", "category": "farewell", "text": "See you, Rahul", "expect": { "name": "Rahul", "evidence": "E1", "template": "e1.farewell" } },
+    { "id": "nm-052", "category": "farewell", "text": "Take care, Fatima", "expect": { "name": "Fatima", "evidence": "E1", "template": "e1.farewell" } },
+    { "id": "nm-053", "category": "farewell", "text": "see ya tomas", "expect": { "name": "Tomas", "evidence": "E1", "template": "e1.farewell" } },
+
+    { "id": "nm-060", "category": "this-is", "text": "This is Elena", "expect": { "name": "Elena", "evidence": "E1", "template": "e1.this_is" } },
+    { "id": "nm-061", "category": "how-are-you", "text": "How are you, Kenji", "expect": { "name": "Kenji", "evidence": "E1", "template": "e1.how_are_you" } },
+
+    { "id": "nm-070", "category": "linguistic-variety", "text": "Nice to meet you, Oluwaseun", "expect": { "name": "Oluwaseun", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-071", "category": "linguistic-variety", "text": "nice to meet you xiuying", "expect": { "name": "Xiuying", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-072", "category": "linguistic-variety", "text": "Nice to meet you, Youssef", "expect": { "name": "Youssef", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-073", "category": "linguistic-variety", "text": "Good to see you, Thandiwe", "expect": { "name": "Thandiwe", "evidence": "E1", "template": "e1.good_to_meet_or_see_you" } },
+    { "id": "nm-074", "category": "linguistic-variety", "text": "Hi, Nguyen Thanh", "note": "Two-token name, both halves validated.", "expect": { "name": "Nguyen Thanh", "evidence": "E1", "template": "e1.greeting" } },
+    { "id": "nm-075", "category": "diacritics", "text": "Nice to meet you, José", "note": "Diacritics are folded for matching but never for the stored name.", "expect": { "name": "José", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-076", "category": "diacritics", "text": "Thanks, Zoë", "expect": { "name": "Zoë", "evidence": "E1", "template": "e1.thanks" } },
+    { "id": "nm-077", "category": "hyphenated", "text": "nice to meet you jean-luc", "expect": { "name": "Jean-Luc", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-078", "category": "unknown-name", "text": "nice to meet you, adaobi", "note": "Not in the given-name lexicon. A strong template accepts it at low validator confidence; a weak one would not.", "expect": { "name": "Adaobi", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+
+    { "id": "nm-080", "category": "ambiguous-word-name", "text": "Nice to meet you, Mark", "note": "'mark' is on the denylist's ambiguous tier: allowed from a strong template only.", "expect": { "name": "Mark", "evidence": "E1", "template": "e1.nice_to_meet_or_see_you" } },
+    { "id": "nm-081", "category": "ambiguous-word-name", "text": "This is June", "expect": { "name": "June", "evidence": "E1", "template": "e1.this_is" } },
+
+    { "id": "nm-090", "category": "explicit-bind", "text": "Lumen, this is Priya", "note": "Contains the literal E1 'this is' template but must be reported as E0.", "expect": { "name": "Priya", "evidence": "E0", "template": "e0.explicit_bind", "command": "bind", "argument": "Priya" } },
+    { "id": "nm-091", "category": "explicit-bind", "text": "lumen this is thabo", "expect": { "name": "Thabo", "evidence": "E0", "template": "e0.explicit_bind", "command": "bind", "argument": "Thabo" } },
+
+    { "id": "nm-100", "category": "other-channel-self-intro", "text": "I'm Priya", "channel": "other", "expect": { "name": "Priya", "evidence": "E2", "template": "e2.self_introduction" } },
+    { "id": "nm-101", "category": "other-channel-self-intro", "text": "my name is Marcus", "channel": "other", "expect": { "name": "Marcus", "evidence": "E2", "template": "e2.self_introduction" } },
+    { "id": "nm-102", "category": "other-channel-self-intro", "text": "I am Daniel", "channel": "other", "expect": { "name": "Daniel", "evidence": "E2", "template": "e2.self_introduction" } },
+    { "id": "nm-103", "category": "other-channel-address", "text": "Hey Marcus", "channel": "other", "expect": { "name": "Marcus", "evidence": "E3", "template": "e3.address" } },
+    { "id": "nm-104", "category": "other-channel-address", "text": "Thanks Priya", "channel": "other", "expect": { "name": "Priya", "evidence": "E3", "template": "e3.address" } }
+  ]
+}

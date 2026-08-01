@@ -1,0 +1,68 @@
+{
+  "name": "adversarial",
+  "description": "Sentences that LOOK like an introduction and must not produce a name, plus partial, malformed, low-confidence, conflicting and wrong-channel input. A false name is the failure mode this product cannot survive: it is written to the store and spoken aloud to a wearer who cannot see that it is wrong. Every case here is a case where returning nothing is the correct answer.",
+  "cases": [
+    { "id": "adv-001", "category": "template-false-positive", "text": "Nice to meet you today", "expect": { "name": null } },
+    { "id": "adv-002", "category": "template-false-positive", "text": "This is great", "expect": { "name": null } },
+    { "id": "adv-003", "category": "template-false-positive", "text": "Thanks everyone", "expect": { "name": null } },
+    { "id": "adv-004", "category": "template-false-positive", "text": "Good morning", "expect": { "name": null } },
+    { "id": "adv-005", "category": "template-false-positive", "text": "Hi there", "expect": { "name": null } },
+    { "id": "adv-006", "category": "template-false-positive", "text": "Good to see you again", "expect": { "name": null } },
+    { "id": "adv-007", "category": "template-false-positive", "text": "See you later", "expect": { "name": null } },
+    { "id": "adv-008", "category": "template-false-positive", "text": "Thanks so much", "expect": { "name": null } },
+    { "id": "adv-009", "category": "template-false-positive", "text": "Nice to meet you all", "expect": { "name": null } },
+    { "id": "adv-010", "category": "template-false-positive", "text": "Thanks team", "expect": { "name": null } },
+    { "id": "adv-011", "category": "template-false-positive", "text": "Hey guys", "expect": { "name": null } },
+    { "id": "adv-012", "category": "template-false-positive", "text": "Take care everyone", "expect": { "name": null } },
+    { "id": "adv-013", "category": "template-false-positive", "text": "Nice to meet you, sir", "expect": { "name": null } },
+    { "id": "adv-014", "category": "template-false-positive", "text": "Thanks, buddy", "expect": { "name": null } },
+    { "id": "adv-015", "category": "template-false-positive", "text": "Hi, all", "expect": { "name": null } },
+    { "id": "adv-016", "category": "template-false-positive", "text": "See you tomorrow", "expect": { "name": null } },
+    { "id": "adv-017", "category": "template-false-positive", "text": "Good to see you, friend", "expect": { "name": null } },
+    { "id": "adv-018", "category": "template-false-positive", "text": "Nice to meet you, everyone", "expect": { "name": null } },
+
+    { "id": "adv-030", "category": "near-template", "text": "It was nice meeting you", "expect": { "name": null } },
+    { "id": "adv-031", "category": "near-template", "text": "This is the budget meeting", "expect": { "name": null } },
+    { "id": "adv-032", "category": "near-template", "text": "How are you doing", "expect": { "name": null } },
+    { "id": "adv-033", "category": "near-template", "text": "How are you feeling today", "note": "Gerund in the name slot — the morphology guard, not the word list, is what rejects this.", "expect": { "name": null } },
+    { "id": "adv-034", "category": "near-template", "text": "Marcus said hi to Priya", "note": "Two real names in the sentence, neither in a slot the wearer opened.", "expect": { "name": null } },
+    { "id": "adv-035", "category": "near-template", "text": "I'll see you at the office", "expect": { "name": null } },
+    { "id": "adv-036", "category": "near-template", "text": "Nice to meet you virtually", "expect": { "name": null } },
+    { "id": "adv-037", "category": "near-template", "text": "Nice to meet you finally", "expect": { "name": null } },
+    { "id": "adv-038", "category": "near-template", "text": "This is really important", "expect": { "name": null } },
+    { "id": "adv-039", "category": "near-template", "text": "Nice to meet you, Lumen", "note": "The wake word is on the hard denylist and can never become a person.", "expect": { "name": null } },
+
+    { "id": "adv-050", "category": "ambiguous-word-name", "text": "Hey Mark", "note": "Accepted trade-off: 'mark my words' costs more than a missed greeting. 'Nice to meet you, Mark' and 'Lumen, this is Mark' both still bind.", "expect": { "name": null } },
+    { "id": "adv-051", "category": "ambiguous-word-name", "text": "See you May", "note": "Almost always the month in a farewell slot.", "expect": { "name": null } },
+    { "id": "adv-052", "category": "ambiguous-word-name", "text": "Hi Summer", "expect": { "name": null } },
+
+    { "id": "adv-070", "category": "partial-transcript", "text": "nice to meet you", "expect": { "name": null } },
+    { "id": "adv-071", "category": "partial-transcript", "text": "thanks,", "expect": { "name": null } },
+    { "id": "adv-072", "category": "partial-transcript", "text": "nice to meet you pri", "note": "Truncated first syllable of a name. Binding 'Pri' is worse than binding nothing.", "expect": { "name": null } },
+    { "id": "adv-073", "category": "partial-transcript", "text": "good to", "expect": { "name": null } },
+    { "id": "adv-074", "category": "partial-transcript", "text": "hi", "expect": { "name": null } },
+
+    { "id": "adv-090", "category": "malformed", "text": "", "expect": { "name": null, "command": null } },
+    { "id": "adv-091", "category": "malformed", "text": "        ", "expect": { "name": null, "command": null } },
+    { "id": "adv-092", "category": "malformed", "text": "!!!,,,...???", "expect": { "name": null, "command": null } },
+    { "id": "adv-093", "category": "malformed", "text": "🎉😀🎊👋", "expect": { "name": null, "command": null } },
+    { "id": "adv-094", "category": "malformed", "text": "nice to meet you 12345", "expect": { "name": null } },
+    { "id": "adv-095", "category": "malformed", "text": "nice to meet you ###", "expect": { "name": null } },
+    { "id": "adv-096", "category": "malformed", "text": "\n\t nice \t to \n meet you Priya \t", "note": "Whitespace damage must not change the answer.", "expect": { "name": "Priya", "evidence": "E1" } },
+
+    { "id": "adv-110", "category": "low-confidence", "text": "Nice to meet you, Priya", "confidence": 0.15, "note": "The recogniser itself says it is guessing.", "expect": { "name": null } },
+    { "id": "adv-111", "category": "low-confidence", "text": "Good to see you Marcus", "confidence": 0.05, "expect": { "name": null } },
+    { "id": "adv-112", "category": "unknown-confidence", "text": "Nice to meet you, Priya", "confidence": 0.0, "note": "0 means 'unknown' from SFSpeechRecognizer, not 'wrong'. Treated as neutral, so the name survives but at a lower score.", "expect": { "name": "Priya", "evidence": "E1", "disposition": "assert" } },
+    { "id": "adv-113", "category": "low-confidence-hedge", "text": "nice to meet you, adaobi", "confidence": 0.6, "note": "Unverified name plus mediocre recognition — extracted, but only as a hedge.", "expect": { "name": "Adaobi", "evidence": "E1", "disposition": "hedge" } },
+
+    { "id": "adv-130", "category": "conflicting-names", "text": "Nice to meet you Priya and thanks Marcus", "note": "Two names, one transcript. Track A must ask, never pick.", "expect": { "names": ["Priya", "Marcus"], "disposition": "requiresDisambiguation" } },
+    { "id": "adv-131", "category": "conflicting-names", "text": "Hi Marcus, nice to meet you Priya", "expect": { "names": ["Marcus", "Priya"], "disposition": "requiresDisambiguation" } },
+
+    { "id": "adv-150", "category": "channel-discipline", "text": "Nice to meet you, Priya", "channel": "other", "note": "A wearer-echo template is not evidence when it did not come from the wearer's microphone.", "expect": { "name": null } },
+    { "id": "adv-151", "category": "channel-discipline", "text": "I'm Yoann", "channel": "wearer", "note": "The wearer introducing themselves must never be stored as the person in front of them.", "expect": { "name": null } },
+    { "id": "adv-152", "category": "channel-discipline", "text": "my name is Marcus", "channel": "wearer", "expect": { "name": null } },
+    { "id": "adv-153", "category": "other-channel-hedge", "text": "Hey Marcus", "channel": "other", "confidence": 0.5, "note": "Attenuated channel, mediocre confidence — must not become a confirmed identity.", "expect": { "name": "Marcus", "evidence": "E3", "disposition": "hedge" } },
+    { "id": "adv-154", "category": "other-channel-hedge", "text": "I'm Priya", "channel": "other", "confidence": 0.6, "expect": { "name": "Priya", "evidence": "E2", "disposition": "hedge" } },
+    { "id": "adv-155", "category": "other-channel-confident", "text": "I'm Priya", "channel": "other", "confidence": 0.95, "expect": { "name": "Priya", "evidence": "E2", "disposition": "assertIfConfident" } }
+  ]
+}
