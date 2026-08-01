@@ -405,9 +405,14 @@ claude mcp list   # expect: wearables ... ✔ Connected
 - [ ] **Clone the SDK repo locally** (not just SPM) — it ships `.claude-plugin/`, `AGENTS.md`,
       `.cursor/rules/`, and Copilot instructions covering streaming patterns, MockDeviceKit, session
       lifecycle, permissions, and debugging. Free, and already written.
-- [ ] **A: create the Developer Center org, add all 5 members, create a `demo` release channel.**
-      This is how teammates get builds onto their own glasses without TestFlight. Doing it at Hour 0
-      means the freeze build is not the first upload anyone has ever attempted.
+- [ ] ~~Create the Developer Center org and a `demo` release channel~~ — **SKIP. Do not do this.**
+      It requires a **Meta Managed Account org at `work.meta.com`** (a business-account flow under
+      your company's official name), and only members of that MMA org can join the team. Verification
+      gated, unbounded wait, zero payoff here: **Developer Mode alone runs your app on your own
+      glasses with no org, project, or release channel.** Release channels only matter for pushing
+      builds to *other people's* glasses — one pair, one Track B engineer, not needed.
+      Revisit only if a second person's glasses must run the build. Note the account types differ:
+      team members need **MMA**, release-channel testers need ordinary **Meta accounts**.
 - [ ] **A: ask Meta directly whether anonymous face clustering is permitted under the DAT Acceptable
       Use Policy** (question 5 in `DEVELOPER_CENTER.md`). Faster and more reliable than reading the
       AUP ourselves, and it is the only open question that can force a design change.
