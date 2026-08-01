@@ -5,3 +5,6 @@ build/
 DerivedData/
 .env
 .env.local
+
+# Private notes — never committed
+notes/
