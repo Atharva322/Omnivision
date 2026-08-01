@@ -173,4 +173,119 @@ final class ProductTextMatcherTests: XCTestCase {
         XCTAssertEqual(brand, "Wonder Bread")
         XCTAssertNil(variant)
     }
+
+    // MARK: - OCR noise, measured on device 2026-08-01
+
+    /// Every one of these is what Vision returned while the wearer held ONE loaf of SOURDOUGH.
+    /// Exact token equality treated each as a different product and asserted "not your usual" —
+    /// telling someone who cannot see that they had picked up the wrong bread while holding the
+    /// right one. That is a false assertion, the one thing the accuracy doctrine forbids.
+    ///
+    /// Normalised edit distance against the observed strings separates cleanly:
+    ///
+    ///     worst same-loaf misread   0.600  (SolianouGH)
+    ///     best genuinely different  0.222  (HanDoulos)
+    ///
+    /// A margin of 0.378, so the 0.55 threshold is not finely balanced.
+    func testOCRMisreadsOfTheSameBrandStillMatchIt() {
+        let sourdough = SavedProduct(
+            barcode: "", brand: "SOURDOUGH", variant: "Seeded", category: "bread")
+        var catalog = ProductCatalog()
+        catalog.save(sourdough)
+
+        let observed = [
+            "SQURPOUGHI", "SOURDOUGR", "SouRnoUGH", "SOURDOUGHI",
+            "GOURDOUGH", "SOURDOUBT", "SolianouGH", "SOURDOUG",
+        ]
+
+        for misread in observed {
+            let text = PackageText(lines: [
+                line(misread, height: 0.4),
+                line("Seeded", height: 0.2),
+            ])
+            let match: ProductMatch = ProductTextMatcher.match(
+                text, against: catalog, category: "bread")
+            XCTAssertEqual(
+                match, ProductMatch.exact(sourdough),
+                "\(misread) is SOURDOUGH misread, not a different loaf")
+        }
+    }
+
+    /// The threshold must not merge genuinely different brands. These were on the same package as
+    /// other text; none of them is the brand, and none may be reported as one.
+    func testGenuinelyDifferentTextDoesNotMatchTheBrand() {
+        let sourdough = SavedProduct(
+            barcode: "", brand: "SOURDOUGH", variant: "Seeded", category: "bread")
+        var catalog = ProductCatalog()
+        catalog.save(sourdough)
+
+        for other in ["HONDUENOS", "HanDoulos", "OATLY", "WONDER BREAD", "MULTIGRAIN"] {
+            let text = PackageText(lines: [
+                line(other, height: 0.4)
+            ])
+            let match: ProductMatch = ProductTextMatcher.match(
+                text, against: catalog, category: "bread")
+            XCTAssertNotEqual(match, ProductMatch.exact(sourdough), "\(other) is not SOURDOUGH")
+        }
+    }
+
+    /// When the saved brand is nowhere in frame and what IS legible is not words, the honest
+    /// report is that we could not read anything — not that this is some other product.
+    ///
+    /// Naming a printed weight as a brand is how "This is NET AT 24 02 1 18 8 00 L, not your usual
+    /// SOURDOUGH" reached the wearer. A legible but unrelated brand is a different matter and IS
+    /// still reported as a substitution — see
+    /// `testCompletelyDifferentBrandIsReportedAsDifferentProductNotNothing`, which is the more
+    /// useful behaviour and stays.
+    func testNoiseIsReportedAsUnreadableNotAsADifferentProduct() {
+        let sourdough = SavedProduct(
+            barcode: "", brand: "SOURDOUGH", variant: "Seeded", category: "bread")
+        var catalog = ProductCatalog()
+        catalog.save(sourdough)
+
+        for noise in ["NET AT 24 02 1 18 8 00 L", "AT 1020 089 00000", "24 02 1 18", "1 ma"] {
+            let text = PackageText(lines: [line(noise, height: 0.9)])
+            XCTAssertEqual(
+                ProductTextMatcher.match(text, against: catalog, category: "bread"),
+                ProductMatch.nothingLegible,
+                "\(noise) is not a brand and must not be announced as one")
+        }
+    }
+
+    /// The substitution catch that IS well founded stays: brand confirmed, variant demonstrably
+    /// different. Here the brand is known to be right, so naming the variant is supported.
+    func testAConfirmedBrandWithADifferentVariantStillReportsSubstitution() {
+        let sourdough = SavedProduct(
+            barcode: "", brand: "SOURDOUGH", variant: "Seeded", category: "bread")
+        var catalog = ProductCatalog()
+        catalog.save(sourdough)
+
+        let text = PackageText(lines: [
+            line("SOURDOUGH", height: 0.4),
+            line("Multigrain", height: 0.2),
+        ])
+
+        XCTAssertEqual(
+            ProductTextMatcher.match(text, against: catalog, category: "bread"),
+            .differentProduct(brand: "SOURDOUGH", variant: "Multigrain", expected: sourdough))
+    }
+
+    /// ...but not off OCR noise. "NET AT 24 02 1 18 8 00 L" is a weight, and claiming the wearer
+    /// has the wrong variant on that basis is the same false assertion in a smaller costume.
+    func testANoiseVariantDoesNotTriggerASubstitutionClaim() {
+        let sourdough = SavedProduct(
+            barcode: "", brand: "SOURDOUGH", variant: "Seeded", category: "bread")
+        var catalog = ProductCatalog()
+        catalog.save(sourdough)
+
+        let text = PackageText(lines: [
+            line("SOURDOUGH", height: 0.4),
+            line("NET AT 24 02 1 18 8 00 L", height: 0.2),
+        ])
+
+        XCTAssertEqual(
+            ProductTextMatcher.match(text, against: catalog, category: "bread"),
+            .brandOnly(sourdough, seenVariant: nil),
+            "unreadable is unreadable; it is not a different variant")
+    }
 }

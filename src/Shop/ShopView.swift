@@ -25,6 +25,7 @@
 
 import CoreGraphics
 import Foundation
+import OSLog
 import SwiftUI
 import AccessLensTrackC
 
@@ -501,7 +502,18 @@ final class ShopSession {
         }
     }
 
+    /// Mirrors every event to the unified log as well as the on-screen transcript.
+    ///
+    /// Only the social screen did this, so when the shop loop was reported there was nothing in the
+    /// device log to read back — the transcript is the right channel for a demo and the wrong one
+    /// for diagnosing a session that has already ended.
+    ///
+    ///     sudo log collect --device-udid <udid> --last 15m --output phone.logarchive
+    ///     log show phone.logarchive --predicate 'subsystem == "com.omnivision.shop"'
+    private static let logger = Logger(subsystem: "com.omnivision.shop", category: "session")
+
     private func log(_ kind: String, _ detail: String, spoken: String?) {
+        Self.logger.log("\(kind, privacy: .public) | \(detail, privacy: .public) | spoken=\(spoken ?? "-", privacy: .public)")
         events.append(Event(at: Date(), kind: kind, detail: detail, spoken: spoken))
         if events.count > 80 { events.removeFirst(events.count - 80) }
     }

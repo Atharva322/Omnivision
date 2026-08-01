@@ -44,14 +44,25 @@ public enum ProductTextMatcher {
         guard !brandTokens.isEmpty else { return .nothingLegible }
 
         let lineTokens = text.lines.map { TextNormalizer.tokens(in: $0.text) }
-        guard let brandLineIndex = lineTokens.firstIndex(where: { $0 == brandTokens }) else {
-            // The expected brand is not legible anywhere in frame — but something else IS
-            // (the isEmpty guard above already ruled out nothing at all). Rather than give up,
-            // report what was actually found: picking up a different brand entirely is a more
-            // common substitution than a different variant of the same one, and it is exactly
-            // the failure this path exists to catch.
-            let foundBrand = text.mostProminent ?? "something"
-            let foundVariant = text.lines.count > 1 ? text.lines[1].text : nil
+
+        // Exact equality first — free, and the common case when the label is square to the camera.
+        // Then OCR-tolerant comparison, because a single misread character is not a different loaf.
+        // See PackageTextQuality for the measurement that sets the threshold.
+        let brandLineIndex = lineTokens.firstIndex(where: { $0 == brandTokens })
+            ?? text.lines.firstIndex(where: {
+                PackageTextQuality.namesTheSameThing($0.text, expected.brand)
+            })
+
+        guard let brandLineIndex else {
+            // The expected brand is not legible anywhere in frame, but something else is. Picking
+            // up the wrong brand entirely is the substitution most worth catching, so report it —
+            // but only when what was read is WORDS. Naming a printed weight as a brand is how
+            // "This is NET AT 24 02 1 18 8 00 L, not your usual SOURDOUGH" reached the wearer.
+            guard let foundBrand = PackageTextQuality.speakable(text.mostProminent) else {
+                return .nothingLegible
+            }
+            let foundVariant = text.lines.count > 1
+                ? PackageTextQuality.speakable(text.lines[1].text) : nil
             return .differentProduct(brand: foundBrand, variant: foundVariant, expected: expected)
         }
 
@@ -67,12 +78,23 @@ public enum ProductTextMatcher {
         let expectedVariantTokens = TextNormalizer.tokens(in: expectedVariant)
         let variantConfirmed = lineTokens.enumerated().contains { index, tokens in
             index != brandLineIndex && tokens == expectedVariantTokens
+        } || text.lines.enumerated().contains { index, line in
+            index != brandLineIndex
+                && PackageTextQuality.isTheSameVariant(line.text, expectedVariant)
         }
         if variantConfirmed {
             return .exact(expected)
         }
 
-        if let seenVariant = otherLine(in: text, excluding: brandLineIndex) {
+        // The brand IS confirmed here, so naming a different variant is well founded — but only
+        // if what was read is words. Claiming the wrong variant off a printed weight is the same
+        // false assertion in a smaller costume.
+        if let seenVariant = PackageTextQuality.speakable(
+            otherLine(in: text, excluding: brandLineIndex)) {
+            // ...unless it is simply the saved variant, misread.
+            if PackageTextQuality.isTheSameVariant(seenVariant, expectedVariant) {
+                return .exact(expected)
+            }
             return .differentProduct(brand: expected.brand, variant: seenVariant, expected: expected)
         }
         return .brandOnly(expected, seenVariant: nil)

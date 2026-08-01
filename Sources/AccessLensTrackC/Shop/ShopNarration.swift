@@ -81,27 +81,6 @@ public enum ShopNarration {
         }
     }
 
-    /// A candidate variant, or nil when it is OCR noise rather than words.
-    ///
-    /// Package text recognition returns whatever it sees, which on a real loaf includes weights,
-    /// barcode digits and mangled fragments: "AT 1020 089 00000", "NET AT 24 02 1 18 8 00 L",
-    /// "1 ma". All three were read aloud to the wearer as if they named a variant. That is worse
-    /// than silence — it sounds like information and carries none.
-    ///
-    /// Real variants ("Multigrain", "Barista Edition", "2% Reduced Fat") are mostly letters and
-    /// contain a word. Digits are allowed, they just cannot dominate.
-    static func speakableVariant(_ candidate: String?) -> String? {
-        guard let candidate else { return nil }
-        let letters = candidate.filter(\.isLetter).count
-        let digits = candidate.filter(\.isNumber).count
-
-        // Fewer than three letters is a fragment, not a name.
-        guard letters >= 3 else { return nil }
-        // Letters must carry at least half the content, or this is a code with stray characters.
-        guard letters * 2 >= letters + digits else { return nil }
-        return candidate
-    }
-
     /// The announcement for a text-matched recognition result (docs/SHOP_SCREEN_PLAN.md Task 3),
     /// or nil when the right response is to say nothing.
     ///
@@ -137,7 +116,7 @@ public enum ShopNarration {
             // Two different reasons land here, and the wording must not blur them: nothing else
             // legible in frame, versus something legible that was never saved to compare against.
             let text: String
-            if let seenVariant = Self.speakableVariant(seenVariant) {
+            if let seenVariant = PackageTextQuality.speakable(seenVariant) {
                 text = "This is \(product.brand). I see \(seenVariant), but I don't have a variant saved to compare."
             } else {
                 text = "This is \(product.brand), but I can't read which one."
@@ -170,7 +149,10 @@ public enum ShopNarration {
                 text: "This is \(found), not your usual \(usual).",
                 source: .product,
                 priority: .normal,
-                dedupeKey: "text:different:\(expected.category):\(found)",
+                // NOT keyed on what was read. OCR noise differs every frame, so including it made each
+                // misread a brand-new subject that sailed past the repeat cooldown — 1,173 scans of
+                // one loaf, spoken aloud, because no two garbled spellings collided.
+                dedupeKey: "text:different:\(expected.category)",
                 at: time)
 
         case .noPreferenceSet:

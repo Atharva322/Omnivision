@@ -382,6 +382,52 @@ audible outcome, even if that outcome is "I can't do that here."
 
 ---
 
+### 34. The system told a blind wearer they had the wrong bread, while they held the right one
+
+Worse than the loop it replaced (#32), because this one was a **false assertion** — the single thing
+the accuracy doctrine forbids. One loaf of SOURDOUGH, 1,173 scans, spoken aloud:
+
+    This is GOURDOUGH, not your usual SOURDOUGH.
+    This is SOURDOUGR, not your usual SOURDOUGH.
+    This is SouRnoUGH, not your usual SOURDOUGH.
+    This is SQURPOUGHI, not your usual SOURDOUGH.
+    This is SOURDOUBT, not your usual SOURDOUGH.
+
+Every "different brand" is the SAME brand, misread. `ProductTextMatcher` compared brand lines with
+exact token equality, so one wrong character made it a different product. A wearer who cannot see
+would have put the correct loaf back.
+
+Two independent failures had to line up:
+
+1. **Exact matching against inherently noisy input.** Vision does not return the brand; it returns a
+   guess at the brand. Measured over the observed strings, normalised edit distance separates
+   cleanly — worst same-loaf misread **0.600**, best genuinely different **0.222**, a margin of
+   0.378. Threshold 0.55, in `PackageTextQuality`.
+2. **The dedupe key embedded the OCR text** (`text:different:<category>:<found>`). Since no two
+   garbled spellings collide, every misread was a brand-new subject that sailed straight past the
+   90-second cooldown. That is why these were spoken rather than held. Now keyed on category alone.
+
+Variants keep a **stricter** threshold (0.8) than brands. At 0.55, "Thin-Sliced 21 Whole Grains"
+scores 0.565 against "21 Whole Grains" and merges two genuinely different products — the threshold
+was fitted on single-word brands and does not transfer to multi-word variants. Caught by an existing
+test, which is exactly what it was written for.
+
+**A threshold measured on one kind of input does not transfer to another.** And note the shape of
+#32 and #34 together: fixing a symptom in narration moved the same underlying problem — trusting a
+single noisy frame — one layer down rather than removing it.
+
+### 35. Only half the app had logging
+
+The device log was empty when the shop loop was reported, because `os_log` was added to the social
+screen and not the shop one. Both now log, under `com.omnivision.social` and `com.omnivision.shop`.
+
+Collecting still needs root, which an agent session does not have:
+
+    sudo /usr/bin/log collect --device-udid <udid> --last 15m --output phone.logarchive
+    log show phone.logarchive --predicate 'subsystem BEGINSWITH "com.omnivision"'
+
+---
+
 ## LOW — cleanup, but permanent if ignored
 
 ### 14. 15 MB of JPEGs are in git
@@ -427,7 +473,7 @@ Not everything is a risk. These are measured, not assumed:
 - **Name binding end-to-end on hardware** — `"Nice to meet you Priya"` → `ASSERT — Priya`, and
   `"Lumen, this is Priya"` → explicit bind, both observed live.
 - **Package text OCR at confidence 1.00** at both 30 cm and 1 m, with no aiming.
-- **356 tests passing**, including regression tests pinning every bug found this week. Runnable on
+- **361 tests passing**, including regression tests pinning every bug found this week. Runnable on
   Linux too — `scripts/swift-linux.sh test` runs the whole suite in the `swift:6.0` container, so
   validating a change does not require a Mac.
 - **222 fixture examples with zero false assertions and zero safety violations** in the Track C
