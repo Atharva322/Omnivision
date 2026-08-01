@@ -20,6 +20,15 @@ public protocol AudioSpining {
     func start() async throws
     func stop()
     var pcmStream: AsyncStream<AVAudioPCMBuffer> { get }
+
+    /// Whether audio is genuinely coming from the glasses (Bluetooth HFP) rather than the phone.
+    ///
+    /// Part of the contract because a silent fallback to the phone microphone is otherwise
+    /// indistinguishable from success — the app captures the wrong device and looks healthy. A
+    /// blind wearer cannot see a route badge, so anything depending on glasses audio has to be
+    /// able to ask. This is also the check that surfaced the measured 16 kHz HFP route, which
+    /// contradicts the 8 kHz stated in Meta's documentation.
+    var isGlassesRoute: Bool { get }
 }
 
 public protocol SpeechStreaming {

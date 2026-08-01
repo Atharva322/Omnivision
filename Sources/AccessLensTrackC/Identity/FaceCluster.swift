@@ -15,6 +15,43 @@ public struct FaceClusterPolicy: Sendable {
 }
 
 public actor FaceCluster: FaceClustering {
+
+    #if canImport(CoreGraphics)
+    /// Converts a Vision normalized boundingBox into a CGImage crop rect.
+    ///
+    /// Vision uses a BOTTOM-LEFT origin; `CGImage.cropping(to:)` expects TOP-LEFT. Scaling alone
+    /// is not enough — Y must be flipped, or a face in the upper frame is cropped from the lower
+    /// frame and the feature print describes the wrong region, silently.
+    ///
+    /// `nonisolated static` so it can be tested without a face, an image, or the actor.
+    nonisolated static func imageRect(
+        fromNormalized box: CGRect,
+        imageWidth: Int,
+        imageHeight: Int
+    ) -> CGRect {
+        let width = CGFloat(imageWidth)
+        let height = CGFloat(imageHeight)
+
+        let x = box.origin.x * width
+        let w = box.size.width * width
+        let h = box.size.height * height
+        // box.maxY is the TOP edge in Vision space; its distance from 1.0 is the distance from
+        // the top of the image.
+        let y = (1.0 - box.origin.y - box.size.height) * height
+
+        // Vision occasionally reports boxes extending past the frame; an out-of-bounds rect makes
+        // cropping return nil, which would look like "no face found".
+        let clampedX = max(0, min(x, width))
+        let clampedY = max(0, min(y, height))
+        return CGRect(
+            x: clampedX,
+            y: clampedY,
+            width: max(0, min(w, width - clampedX)),
+            height: max(0, min(h, height - clampedY))
+        )
+    }
+    #endif
+
     private let policy: FaceClusterPolicy
 
     #if canImport(Vision) && canImport(CoreGraphics)
@@ -69,15 +106,10 @@ public actor FaceCluster: FaceClustering {
             return nil
         }
 
-        // Vision reports boundingBox with a BOTTOM-LEFT origin; CGImage.cropping(to:) expects
-        // TOP-LEFT. Without this flip a face in the upper frame is cropped from the lower frame,
-        // producing feature prints of the wrong region — clustering silently on garbage.
-        let visionRect = VNImageRectForNormalizedRect(face.boundingBox, image.width, image.height)
-        let rect = CGRect(
-            x: visionRect.origin.x,
-            y: CGFloat(image.height) - visionRect.origin.y - visionRect.height,
-            width: visionRect.width,
-            height: visionRect.height
+        let rect = Self.imageRect(
+            fromNormalized: face.boundingBox,
+            imageWidth: image.width,
+            imageHeight: image.height
         )
         guard let crop = image.cropping(to: rect) else {
             return nil
