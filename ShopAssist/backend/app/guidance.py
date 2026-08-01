@@ -45,6 +45,24 @@ def matches_preference(product: dict, preference: dict | None) -> bool:
     return brand_match and variant_match
 
 
+# The vision model returns the literal string "unknown" for fields it cannot read. Interpolating
+# that produced "Found unknown unknown top center." — spoken nonsense to someone who cannot see the
+# shelf. Treat it as absent rather than as a name.
+_UNREADABLE = {"", "unknown", "unclear", "n/a", "none", "unreadable"}
+
+
+def readable(value: str | None) -> str:
+    """The value if the model actually read it, else empty."""
+    text = (value or "").strip()
+    return "" if text.lower() in _UNREADABLE else text
+
+
+def product_label(product: dict) -> str:
+    """Display name from whatever was legible. Empty when nothing was."""
+    parts = [readable(product.get("brand")), readable(product.get("variant"))]
+    return " ".join(p for p in parts if p).strip()
+
+
 def describe_position(product: dict) -> str:
     position = product.get("position") or {}
     vertical = position.get("vertical", "")
@@ -72,7 +90,11 @@ def build_guidance(session: dict, current_section: str) -> str:
 
     # The chosen product fills the frame -> the wearer is holding it up. Switch to confirmation.
     if chosen.get("held_close"):
-        label = f"{chosen.get('brand', '')} {chosen.get('variant', '')}".strip()
+        label = product_label(chosen)
+        if not label:
+            # Held up but illegible. Saying nothing useful is better than naming it wrongly, and
+            # the wearer can act on this — it tells them to move it.
+            return "I can't tell what this is. Try turning it slowly toward the camera."
         if not preference:
             # Nothing was ever saved for this category — name it, don't imply a "usual" exists.
             return f"This looks like {label}."
@@ -90,8 +112,11 @@ def build_guidance(session: dict, current_section: str) -> str:
             return f"This looks like your {label}."
         return f"This doesn't look like your usual pick — it looks like {label}. Your usual one should be nearby."
 
-    label = f"{chosen.get('brand', '')} {chosen.get('variant', '')}".strip()
+    label = product_label(chosen)
     position_text = describe_position(chosen)
+    if not label:
+        # Position is still genuinely useful even when the product cannot be named.
+        return f"There's something here {position_text}." if position_text else "There's something here."
     if preferred_matches:
         return f"Your usual {label} is {position_text}."
     # Position guidance is help finding something, not a claim about what it is, so "found" is

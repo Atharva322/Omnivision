@@ -19,7 +19,15 @@ def get_client() -> OpenAI:
     return _client
 
 
-def call_vision_json(image_b64: str, system_prompt: str, user_prompt: str) -> dict:
+def call_vision_json(
+    image_b64: str, system_prompt: str, user_prompt: str, _attempt: int = 0
+) -> dict:
+    """One multimodal call, returning parsed JSON.
+
+    Retries once on a malformed response. Observed against the real model: a shelf with several
+    products overran max_tokens and the JSON arrived truncated mid-structure, raising
+    JSONDecodeError and killing the whole frame. A wearer standing in an aisle gets silence.
+    """
     response = get_client().chat.completions.create(
         model="gpt-4o",
         response_format={"type": "json_object"},
@@ -36,9 +44,17 @@ def call_vision_json(image_b64: str, system_prompt: str, user_prompt: str) -> di
                 ],
             },
         ],
-        max_tokens=600,
+        max_tokens=1500,
     )
-    return json.loads(response.choices[0].message.content)
+    content = response.choices[0].message.content
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        if _attempt >= 1:
+            # Degrade to "saw nothing" rather than raising. Guidance already handles an empty
+            # product list, and one unusable frame should not end the session.
+            return {"section": "unknown", "products": []}
+        return call_vision_json(image_b64, system_prompt, user_prompt, _attempt=_attempt + 1)
 
 
 LOCATE_SYSTEM_PROMPT = """You are a grocery store scene analysis assistant. Analyze the photo and \

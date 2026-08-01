@@ -152,3 +152,58 @@ def test_brand_only_preference_does_not_claim_the_variant_is_your_usual():
     assert "your usual Oatly" in text
     assert "your Oatly Chocolate" not in text
     assert "don't have a variant saved" in text
+
+
+def test_unidentified_product_is_not_narrated_as_a_name():
+    """The real model returns brand/variant "unknown" for products it cannot read on a shelf.
+    Interpolating that produced "Found unknown unknown top center." — spoken nonsense. The
+    position is still useful, so say where it is without pretending to know what it is.
+    """
+    session = {
+        "target": "milk",
+        "last_products": [
+            {
+                "brand": "unknown",
+                "variant": "unknown",
+                "category": "milk",
+                "held_close": False,
+                "position": {"vertical": "top", "horizontal": "center"},
+            }
+        ],
+        "preferences": {},
+    }
+    text = build_guidance(session, "dairy")
+    assert "unknown" not in text.lower()
+    assert "top center" in text
+
+
+def test_partially_identified_product_uses_only_the_part_it_knows():
+    session = {
+        "target": "milk",
+        "last_products": [
+            {
+                "brand": "unknown",
+                "variant": "Almondmilk",
+                "category": "milk",
+                "held_close": False,
+                "position": {"vertical": "top", "horizontal": "right"},
+            }
+        ],
+        "preferences": {},
+    }
+    text = build_guidance(session, "dairy")
+    assert "unknown" not in text.lower()
+    assert "Almondmilk" in text
+
+
+def test_held_close_unidentified_product_admits_it_cannot_tell():
+    session = {
+        "target": "milk",
+        "last_products": [
+            {"brand": "unknown", "variant": "unknown", "category": "milk", "held_close": True}
+        ],
+        "preferences": {},
+    }
+    text = build_guidance(session, "dairy")
+    assert "unknown" not in text.lower()
+    assert "can't tell" in text.lower() or "cannot tell" in text.lower()
