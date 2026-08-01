@@ -89,4 +89,82 @@ final class PersonStoreTests: XCTestCase {
         XCTAssertEqual(person.pendingNotes, ["follow up on roadmap"])
         XCTAssertEqual(person.encounterCount, 1)
     }
+
+    func testRejectedAssociationIsDetachedAndPersists() async throws {
+        let url = temporaryStoreURL()
+        let cluster = UUID()
+        let store = try PersonStore(url: url)
+        let saved = try await store.bind(name: "Priya", clusterID: cluster)
+
+        let corrected = try await store.rejectIdentityAssociation(
+            personID: saved.id,
+            clusterID: cluster,
+            at: Date(timeIntervalSince1970: 100)
+        )
+
+        XCTAssertFalse(corrected.clusterIDs.contains(cluster))
+        let rejectedBeforeReload = await store.isRejected(personID: saved.id, clusterID: cluster)
+        XCTAssertTrue(rejectedBeforeReload)
+
+        let reloaded = try PersonStore(url: url)
+        let rejectedAfterReload = await reloaded.isRejected(personID: saved.id, clusterID: cluster)
+        XCTAssertTrue(rejectedAfterReload)
+    }
+
+    func testDeleteReturnsRemovedPersonAndClearsRejectedAssociations() async throws {
+        let url = temporaryStoreURL()
+        let cluster = UUID()
+        let store = try PersonStore(url: url)
+        let saved = try await store.bind(name: "Priya", clusterID: cluster)
+        _ = try await store.rejectIdentityAssociation(personID: saved.id, clusterID: cluster)
+
+        let removed = try await store.delete(id: saved.id)
+
+        XCTAssertEqual(removed.id, saved.id)
+        let foundAfterDelete = await store.find(id: saved.id)
+        let rejectedAfterDelete = await store.isRejected(personID: saved.id, clusterID: cluster)
+        XCTAssertNil(foundAfterDelete)
+        XCTAssertFalse(rejectedAfterDelete)
+    }
+
+    func testLegacyUnversionedStoreMigratesOnNextSave() async throws {
+        let url = temporaryStoreURL()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let person = Person(name: "Priya", encounterCount: 1)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let legacy = try encoder.encode(LegacyPeople(people: [person]))
+        try legacy.write(to: url)
+
+        let store = try PersonStore(url: url)
+        _ = try await store.addPendingNote("follow up", to: person.id)
+
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        XCTAssertEqual(json?["schemaVersion"] as? Int, PersonStore.currentSchemaVersion)
+    }
+
+    func testCorruptStoreIsPreservedBeforeInitializationFails() throws {
+        let url = temporaryStoreURL()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("{not-json".utf8).write(to: url)
+
+        XCTAssertThrowsError(try PersonStore(url: url))
+
+        let siblings = try FileManager.default.contentsOfDirectory(
+            at: url.deletingLastPathComponent(),
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertTrue(siblings.contains { $0.lastPathComponent.contains("corrupt-") })
+        XCTAssertEqual(try Data(contentsOf: url), Data("{not-json".utf8))
+    }
+}
+
+private struct LegacyPeople: Encodable {
+    let people: [Person]
 }

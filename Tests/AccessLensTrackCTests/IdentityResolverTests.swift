@@ -96,4 +96,22 @@ final class IdentityResolverTests: XCTestCase {
         let resolver = IdentityResolver()
         XCTAssertEqual(resolver.resolve(names: [], cluster: nil), .nothing)
     }
+
+    func testRejectedFacePairIsNotSuggestedAgain() {
+        let cluster = UUID()
+        let priya = person(name: "Priya", clusterIDs: [cluster])
+        let rejected = RejectedIdentityAssociation(
+            personID: priya.id,
+            clusterID: cluster,
+            rejectedAt: Date(timeIntervalSince1970: 100)
+        )
+        let resolver = IdentityResolver(
+            people: [priya],
+            rejectedAssociations: [rejected]
+        )
+
+        let state = resolver.resolve(names: [], cluster: cluster)
+
+        XCTAssertEqual(state, .unnamedCluster(cluster))
+    }
 }

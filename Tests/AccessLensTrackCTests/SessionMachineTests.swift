@@ -39,4 +39,28 @@ final class SessionMachineTests: XCTestCase {
         try await machine.pause()
         XCTAssertEqual(await machine.currentState(), .idle)
     }
+
+    func testCorrectionReturnsReportingToBinding() async throws {
+        let machine = SessionMachine()
+        try await machine.startCapture()
+        try await machine.finishCapture()
+        try await machine.completeBinding()
+
+        try await machine.rejectReportedIdentity()
+
+        XCTAssertEqual(await machine.currentState(), .binding)
+    }
+
+    func testCorrectionOutsideReportingIsRejected() async {
+        let machine = SessionMachine()
+
+        do {
+            try await machine.rejectReportedIdentity()
+            XCTFail("expected invalid transition")
+        } catch let error as SessionMachineError {
+            XCTAssertEqual(error, .invalidTransition(from: .idle, to: .binding))
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
 }

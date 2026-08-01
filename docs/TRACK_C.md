@@ -1,6 +1,6 @@
-# Track C — Extraction algorithms (Linux-portable half)
+# Track C — Extraction algorithms in the portable core package
 
-Development note for the AccessLens Social team. Scope: the string-processing half of Track C —
+Development note for the AccessLens Social team. This document covers the string-processing half of Track C —
 wake-word spotting, the command grammar, wearer-echo name extraction, the denylist, and the
 confidence/evidence metadata the ladder consumes. All of it is Foundation-only and builds, runs and
 is tested on Linux.
@@ -24,13 +24,14 @@ are described at the bottom.
 | Fixture corpus + report | `Fixtures/*.json`, `trackc-eval` | 161 cases, all passing |
 | Wake-word false-trigger test | — | **not started — needs the glasses** |
 | Wearer-vs-other WER (G1) | — | **not started — needs the glasses** |
-| `VNFeaturePrintObservation` threshold tuning | — | **not started — needs the camera** |
+| `VNFeaturePrintObservation` threshold tuning | `Sources/AccessLensTrackC/Identity/FaceCluster.swift` | implementation present; calibration not started |
 | Battery / thermal profile | — | **not started — needs the hardware** |
 | Latency budget per stage | — | **not started — needs the Bluetooth path** |
 
-Deliberately **not** implemented here, because they belong to other tracks: Meta glasses
-connectivity, Bluetooth routing, camera capture, face clustering, `PersonStore`, UI, TTS narration,
-relationship tiers, conversation summarisation.
+Meta glasses connectivity, Bluetooth routing, camera capture, UI, TTS narration, and conversation
+summarisation remain outside this package. Track A core, face clustering, `PersonStore`, relationship
+tiers, and identity resolution now live beside Track C under `Sources/AccessLensTrackC`; see
+[`TRACK_A.md`](./TRACK_A.md).
 
 ---
 
@@ -42,7 +43,7 @@ the repository:
 
 ```sh
 scripts/swift-linux.sh build
-scripts/swift-linux.sh test                    # 98 tests
+scripts/swift-linux.sh test
 scripts/swift-linux.sh run trackc-eval Fixtures
 ```
 
@@ -53,7 +54,7 @@ swift test
 swift run trackc-eval Fixtures
 ```
 
-Current results (Swift 6.0.3, `swift-tools-version:5.9`, x86_64 Linux):
+The last recorded Track C-only result (before later Track A tests were added) was:
 
 ```
 EvidenceAssessmentTests    15 tests   0 failures
@@ -243,7 +244,7 @@ Everything below is unstarted and unmeasured. None of it can be faked from text.
    invoked it, plus how many deliberate invocations are missed. The parser requires the wake word at
    the front of an utterance and an exact grammar row after it, which should make false triggers
    rare in text — but the real risk is the *recogniser* emitting "lumen" for something else at
-   8 kHz, and no amount of parser precision addresses that. If it misfires, change the wake word
+   the measured 16 kHz HFP route, and no amount of parser precision addresses that. If it misfires, change the wake word
    immediately; `CommandPolicy.wakeWord` and `acceptedWakeVariants` are the two knobs, and the
    variant set is empty precisely so this test decides what goes in it.
 2. **G1: wearer-channel vs other-channel WER.** Two people talking at 1 m, glasses on, in a quiet
@@ -251,7 +252,7 @@ Everything below is unstarted and unmeasured. None of it can be faked from text.
    The entire echo-primary design assumes wearer ≫ other. If it does not hold, fall back to E0-only
    explicit binding, which always works. Track C's `EvidencePolicy.wearerAssertThreshold` and
    `otherChannelAssertThreshold` are placeholders until this number exists.
-3. **Name recognition at 8 kHz.** How often unusual names survive narrowband ASR intact. This is
+3. **Name recognition at the measured 16 kHz HFP rate.** How often unusual names survive ASR intact. This is
    what decides whether the given-name lexicon is a useful signal or a distraction on device.
 4. **`VNFeaturePrintObservation` distance threshold**, with same-person and different-person
    distance distributions.

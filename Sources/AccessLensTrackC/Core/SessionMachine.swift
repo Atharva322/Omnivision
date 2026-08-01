@@ -40,6 +40,11 @@ public actor SessionMachine {
         try await transition(to: .idle, allowedFrom: [.reporting], reason: "finishReporting")
     }
 
+    /// Re-open binding after the wearer rejects the reported identity.
+    public func rejectReportedIdentity() async throws {
+        try await transition(to: .binding, allowedFrom: [.reporting], reason: "identityCorrection")
+    }
+
     public func pause() async throws {
         guard state != .idle else {
             return

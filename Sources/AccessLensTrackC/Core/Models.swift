@@ -95,6 +95,22 @@ public struct Encounter: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// A face/person pairing the wearer explicitly rejected.
+///
+/// Persisting this prevents a face-only hypothesis from being suggested again immediately after
+/// "Lumen, that's wrong". It contains identifiers only; no image or transcript is stored.
+public struct RejectedIdentityAssociation: Codable, Hashable, Sendable {
+    public let personID: UUID
+    public let clusterID: UUID
+    public let rejectedAt: Date
+
+    public init(personID: UUID, clusterID: UUID, rejectedAt: Date = Date()) {
+        self.personID = personID
+        self.clusterID = clusterID
+        self.rejectedAt = rejectedAt
+    }
+}
+
 public enum Channel: String, Codable, Sendable {
     case wearer
     case other

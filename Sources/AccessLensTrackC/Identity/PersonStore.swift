@@ -4,16 +4,21 @@ public enum PersonStoreError: Error, Equatable {
     case personNotFound(UUID)
     case invalidName
     case invalidPendingNote
+    case unsupportedSchemaVersion(Int)
 }
 
 public actor PersonStore {
+    public static let currentSchemaVersion = 1
     public let url: URL
     private var peopleByID: [UUID: Person]
+    private var rejectedAssociations: Set<RejectedIdentityAssociation>
 
     public init(url: URL? = nil) throws {
         let resolvedURL = url ?? Self.defaultURL()
         self.url = resolvedURL
-        self.peopleByID = try Self.loadPeople(from: resolvedURL)
+        let persisted = try Self.load(from: resolvedURL)
+        self.peopleByID = Dictionary(uniqueKeysWithValues: persisted.people.map { ($0.id, $0) })
+        self.rejectedAssociations = Set(persisted.rejectedAssociations)
     }
 
     public func allPersons() -> [Person] {
@@ -39,6 +44,16 @@ public actor PersonStore {
 
     public func find(clusterID: UUID) -> Person? {
         peopleByID.values.first { $0.clusterIDs.contains(clusterID) }
+    }
+
+    public func isRejected(personID: UUID, clusterID: UUID) -> Bool {
+        rejectedAssociations.contains {
+            $0.personID == personID && $0.clusterID == clusterID
+        }
+    }
+
+    public func rejectedIdentityAssociations() -> [RejectedIdentityAssociation] {
+        rejectedAssociations.sorted { $0.rejectedAt < $1.rejectedAt }
     }
 
     @discardableResult
@@ -147,9 +162,38 @@ public actor PersonStore {
         return person
     }
 
-    public func delete(id: UUID) throws {
-        peopleByID.removeValue(forKey: id)
+    /// Records "that's wrong" and detaches the rejected cluster from the person.
+    @discardableResult
+    public func rejectIdentityAssociation(
+        personID: UUID,
+        clusterID: UUID,
+        at: Date = Date()
+    ) throws -> Person {
+        guard var person = peopleByID[personID] else {
+            throw PersonStoreError.personNotFound(personID)
+        }
+        person.clusterIDs.removeAll { $0 == clusterID }
+        peopleByID[personID] = person
+        rejectedAssociations = Set(rejectedAssociations.filter {
+            $0.personID != personID || $0.clusterID != clusterID
+        })
+        rejectedAssociations.insert(
+            RejectedIdentityAssociation(personID: personID, clusterID: clusterID, rejectedAt: at)
+        )
         try save()
+        return person
+    }
+
+    /// Deletes the persisted person and returns the removed record so the iOS coordinator can
+    /// delete its pronunciation clip and face-print artifacts too.
+    @discardableResult
+    public func delete(id: UUID) throws -> Person {
+        guard let removed = peopleByID.removeValue(forKey: id) else {
+            throw PersonStoreError.personNotFound(id)
+        }
+        rejectedAssociations = Set(rejectedAssociations.filter { $0.personID != id })
+        try save()
+        return removed
     }
 
     private func applyDerivedTier(to person: inout Person) {
@@ -162,7 +206,11 @@ public actor PersonStore {
 
     private func save() throws {
         try Self.ensureParentDirectory(for: url)
-        let payload = PersistedPeople(people: allPersons())
+        let payload = PersistedPeople(
+            schemaVersion: Self.currentSchemaVersion,
+            people: allPersons(),
+            rejectedAssociations: rejectedIdentityAssociations()
+        )
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -170,20 +218,41 @@ public actor PersonStore {
         try data.write(to: url, options: [.atomic])
     }
 
-    private static func loadPeople(from url: URL) throws -> [UUID: Person] {
+    private static func load(from url: URL) throws -> PersistedPeople {
         guard FileManager.default.fileExists(atPath: url.path) else {
-            return [:]
+            return PersistedPeople(
+                schemaVersion: currentSchemaVersion,
+                people: [],
+                rejectedAssociations: []
+            )
         }
 
         let data = try Data(contentsOf: url)
         guard !data.isEmpty else {
-            return [:]
+            return PersistedPeople(
+                schemaVersion: currentSchemaVersion,
+                people: [],
+                rejectedAssociations: []
+            )
         }
 
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let payload = try decoder.decode(PersistedPeople.self, from: data)
-        return Dictionary(uniqueKeysWithValues: payload.people.map { ($0.id, $0) })
+        do {
+            let payload = try decoder.decode(PersistedPeople.self, from: data)
+            guard payload.schemaVersion <= currentSchemaVersion else {
+                throw PersonStoreError.unsupportedSchemaVersion(payload.schemaVersion)
+            }
+            return payload
+        } catch let error as PersonStoreError {
+            throw error
+        } catch {
+            // Preserve evidence for diagnosis. Never overwrite a corrupted identity store.
+            let backup = url.deletingPathExtension()
+                .appendingPathExtension("corrupt-\(Int(Date().timeIntervalSince1970)).json")
+            try? FileManager.default.copyItem(at: url, to: backup)
+            throw error
+        }
     }
 
     private static func ensureParentDirectory(for url: URL) throws {
@@ -222,5 +291,34 @@ public actor PersonStore {
 }
 
 private struct PersistedPeople: Codable {
+    let schemaVersion: Int
     let people: [Person]
+    let rejectedAssociations: [RejectedIdentityAssociation]
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case people
+        case rejectedAssociations
+    }
+
+    init(
+        schemaVersion: Int,
+        people: [Person],
+        rejectedAssociations: [RejectedIdentityAssociation]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.people = people
+        self.rejectedAssociations = rejectedAssociations
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // Files written before schema versioning contained only { "people": [...] }.
+        schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 0
+        people = try container.decode([Person].self, forKey: .people)
+        rejectedAssociations = try container.decodeIfPresent(
+            [RejectedIdentityAssociation].self,
+            forKey: .rejectedAssociations
+        ) ?? []
+    }
 }

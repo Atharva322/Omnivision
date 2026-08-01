@@ -3,9 +3,14 @@ import Foundation
 public struct IdentityResolver: IdentityResolving {
     private let peopleByName: [String: Person]
     private let peopleByCluster: [UUID: Person]
+    private let rejectedPairs: Set<RejectedPair>
     private let policy: EvidencePolicy
 
-    public init(people: [Person] = [], policy: EvidencePolicy = .default) {
+    public init(
+        people: [Person] = [],
+        rejectedAssociations: [RejectedIdentityAssociation] = [],
+        policy: EvidencePolicy = .default
+    ) {
         self.peopleByName = Dictionary(
             uniqueKeysWithValues: people.map { ($0.name.accessLensIdentityKey, $0) }
         )
@@ -17,6 +22,9 @@ public struct IdentityResolver: IdentityResolving {
             }
         }
         self.peopleByCluster = clusterMap
+        self.rejectedPairs = Set(rejectedAssociations.map {
+            RejectedPair(personID: $0.personID, clusterID: $0.clusterID)
+        })
         self.policy = policy
     }
 
@@ -48,7 +56,8 @@ public struct IdentityResolver: IdentityResolving {
         guard let cluster else {
             return .nothing
         }
-        if let known = peopleByCluster[cluster] {
+        if let known = peopleByCluster[cluster],
+           !rejectedPairs.contains(RejectedPair(personID: known.id, clusterID: cluster)) {
             return .likely(attach(cluster: cluster, to: known))
         }
         return .unnamedCluster(cluster)
@@ -95,4 +104,9 @@ public struct IdentityResolver: IdentityResolving {
 
         return names
     }
+}
+
+private struct RejectedPair: Hashable {
+    let personID: UUID
+    let clusterID: UUID
 }
