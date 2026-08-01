@@ -5,9 +5,33 @@ import Vision
 #endif
 
 public struct FaceClusterPolicy: Sendable {
+    /// Maximum feature-print distance at which two crops are treated as the same person.
+    ///
+    /// MEASURED 2026-08-01 on 9 photos of 3 people taken through the glasses:
+    ///
+    ///     same person       0.53 - 0.85   (mean 0.69)
+    ///     different people  0.61 - 0.96   (mean 0.75)
+    ///
+    /// The distributions OVERLAP: two different people measured 0.61, closer than the same
+    /// person photographed twice at 0.85. `VNGenerateImageFeaturePrintRequest` is general image
+    /// similarity, not a face embedding, and it cannot do face re-identification. Rotating the
+    /// crops upright first was tested and made it worse.
+    ///
+    /// The previous default was 22.0 — more than twenty times the largest distance ever
+    /// observed. Every face would have matched every other face, collapsing all people into one
+    /// person and confidently recalling the wrong name. It went unnoticed because nothing
+    /// called this and it had no tests.
+    ///
+    /// 0.55 is chosen for PRECISION, not recall: below the 0.61 at which two different people
+    /// were ever confused, so it produces no false matches while catching only the closest true
+    /// ones. That trade is right because a face match may only ever HEDGE — a missed match costs
+    /// one question, a false match names the wrong person.
+    ///
+    /// Cross-session recall from a face is therefore NOT reliable. Identity rests on spoken
+    /// names (E0-E3), which the design already assumes.
     public var distanceThreshold: Float
 
-    public init(distanceThreshold: Float = 22.0) {
+    public init(distanceThreshold: Float = 0.55) {
         self.distanceThreshold = distanceThreshold
     }
 
