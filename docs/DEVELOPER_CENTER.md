@@ -75,7 +75,24 @@ Exposes `search_dat_docs` — semantic search over DAT guides, API reference, an
 developer preview; v0.6 broke existing video streaming code between releases. Guessing at API shapes
 from memory is how you lose an hour at 3 a.m.
 
-### 3.2 Repo-native plugin
+> **Note:** MCP tools only load at session start. After running the command above, **restart Claude
+> Code** or the `search_dat_docs` tool will not be callable.
+
+### 3.2 Repo-native plugin — one command
+
+The SDK repo ships `install-skills.sh`, which installs nine DAT skills (camera-streaming,
+session-lifecycle, permissions-registration, mockdevice-testing, debugging, dat-conventions,
+getting-started, sample-app-guide, display-access) plus a 1,132-line `AGENTS.md`:
+
+```bash
+git clone --depth 1 https://github.com/facebook/meta-wearables-dat-ios.git
+cd meta-wearables-dat-ios && ./install-skills.sh claude   # or: codex | cursor | copilot | all
+```
+
+Already installed in this repo at `.claude/skills/` with `AGENTS.md` at the root. Two runnable
+samples ship too — **`samples/CameraAccess`** is the one to start from; do not scaffold from zero.
+
+### 3.3 Repo-native plugin (reference)
 
 The SDK repos ship pre-configured AI tooling: `.claude-plugin/marketplace.json` for Claude Code,
 `.codex-plugin/plugin.json` for Codex, plus `.github/copilot-instructions.md`, `.cursor/rules/*.mdc`,
