@@ -1,5 +1,12 @@
 import Foundation
 
+// CGImage is used in the FaceClustering signature itself, outside any canImport guard. It arrived
+// transitively via Vision until the feature-print implementation was removed, so it now needs an
+// explicit import — otherwise the package does not compile on Apple platforms at all.
+#if canImport(CoreGraphics)
+import CoreGraphics
+#endif
+
 public actor FaceCluster: FaceClustering {
 
     #if canImport(CoreGraphics)
