@@ -4,7 +4,7 @@
 
 **An audio-first assistant for blind and low-vision wearers of Ray-Ban Meta glasses — built so it never guesses.**
 
-[Demo video](https://drive.google.com/drive/folders/1vYlEkMBw1LWhroWLJBNZTtKrnK5h-skD?usp=share_link) · [Presentation](https://vm-document-content-consolidation.vusercontent.net) · [Architecture](#architecture) · [Technology](#technology) · [Hardware findings](#hardware-findings-that-changed-the-design) · [Boundaries](#boundaries)
+[Demo video](https://drive.google.com/drive/folders/1vYlEkMBw1LWhroWLJBNZTtKrnK5h-skD?usp=share_link) · [Presentation](https://storm-stony-61193907.figma.site) · [Architecture](#architecture) · [Technology](#technology) · [Hardware findings](#hardware-findings-that-changed-the-design) · [Boundaries](#boundaries)
 
 ![Swift](https://img.shields.io/badge/Swift-5.9+-F05138?logo=swift&logoColor=white)
 ![iOS](https://img.shields.io/badge/iOS-15+-000000?logo=apple&logoColor=white)
@@ -101,7 +101,7 @@ Wake word: **"Lumen."**
 
 The recorded walkthrough: **[Demo video](https://drive.google.com/drive/folders/1vYlEkMBw1LWhroWLJBNZTtKrnK5h-skD?usp=share_link)**
 
-The project presentation: **[Presentation](https://vm-document-content-consolidation.vusercontent.net)**
+The project presentation: **[Presentation](https://storm-stony-61193907.figma.site)**
 
 Omnivision is a wearable application, so there is no hosted URL to click — the full loop requires Ray-Ban Meta glasses paired to an iPhone. The portable logic below runs anywhere Swift does.
 
