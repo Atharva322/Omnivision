@@ -228,4 +228,4 @@ Omnivision is a hackathon prototype with deliberate production-oriented constrai
 
 ## Team
 
-Built at a 12-hour hackathon by Myan Gupta, Atharva Rane, Yu An Chen, Yoann Frayce, and Dhruva Sharma.
+Built at a 24-hour Create Accessibility hackathon by Myan Gupta, Atharva Rane, Yu An Chen, Yoann Frayce, and Dhruva Sharma.
